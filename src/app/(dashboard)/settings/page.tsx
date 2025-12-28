@@ -39,7 +39,11 @@ export default function SettingsPage() {
     const [cycleLength, setCycleLength] = useState(userProfile?.averageCycleLength || 28);
 
     const handleSave = async () => {
+<<<<<<< HEAD
         if (!user) return;
+=======
+        if (!user || !db) return;
+>>>>>>> v3
 
         setLoading(true);
         try {
@@ -60,12 +64,20 @@ export default function SettingsPage() {
     };
 
     const handleExportData = async () => {
+<<<<<<< HEAD
         if (!user) return;
+=======
+        if (!user || !db) return;
+>>>>>>> v3
 
         setLoading(true);
         try {
             // Fetch all user data
+<<<<<<< HEAD
             const logsRef = collection(db, 'users', user.uid, 'logs');
+=======
+            const logsRef = collection(db!, 'users', user.uid, 'logs');
+>>>>>>> v3
             const logsSnapshot = await getDocs(logsRef);
 
             const logs: any[] = [];
@@ -107,22 +119,38 @@ export default function SettingsPage() {
     };
 
     const handleDeleteAccount = async () => {
+<<<<<<< HEAD
         if (!user) return;
+=======
+        if (!user || !db || !auth) return;
+>>>>>>> v3
 
         setDeleteLoading(true);
         try {
             // Delete user document and subcollections
+<<<<<<< HEAD
             const logsRef = collection(db, 'users', user.uid, 'logs');
+=======
+            const logsRef = collection(db!, 'users', user.uid, 'logs');
+>>>>>>> v3
             const logsSnapshot = await getDocs(logsRef);
 
             const deletePromises = logsSnapshot.docs.map((doc) => deleteDoc(doc.ref));
             await Promise.all(deletePromises);
 
+<<<<<<< HEAD
             await deleteDoc(doc(db, 'users', user.uid));
 
             // Delete auth user
             if (auth.currentUser) {
                 await deleteUser(auth.currentUser);
+=======
+            await deleteDoc(doc(db!, 'users', user.uid));
+
+            // Delete auth user
+            if (auth!.currentUser) {
+                await deleteUser(auth!.currentUser);
+>>>>>>> v3
             }
 
             router.push('/login');
@@ -250,8 +278,13 @@ export default function SettingsPage() {
                                 key={lang.code}
                                 onClick={() => setLanguage(lang.code)}
                                 className={`p-4 rounded-xl border-2 text-left transition-all ${language === lang.code
+<<<<<<< HEAD
                                         ? 'border-primary bg-primary/10'
                                         : 'border-border hover:border-primary/50'
+=======
+                                    ? 'border-primary bg-primary/10'
+                                    : 'border-border hover:border-primary/50'
+>>>>>>> v3
                                     }`}
                             >
                                 <span className="font-medium">{lang.name}</span>

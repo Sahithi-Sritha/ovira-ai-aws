@@ -49,4 +49,21 @@ if (typeof window !== 'undefined') {
     }
 }
 
+<<<<<<< HEAD
 export { app, auth, db, storage, googleProvider };
+=======
+// Export with type assertions for client-side only usage
+// These should only be used in 'use client' components
+export { app, auth, db as db, storage, googleProvider };
+
+// Type-safe getters that throw if Firebase isn't initialized
+export function getDb(): Firestore {
+    if (!db) throw new Error('Firestore not initialized. Are you running on the server?');
+    return db;
+}
+
+export function getAuthInstance(): Auth {
+    if (!auth) throw new Error('Auth not initialized. Are you running on the server?');
+    return auth;
+}
+>>>>>>> v3

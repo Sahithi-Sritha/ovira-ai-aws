@@ -376,14 +376,22 @@ export default function HealthReportPage() {
                         <Card variant="elevated">
                             <CardContent className="pt-4 text-center">
                                 <Activity className="w-6 h-6 text-accent mx-auto mb-2" />
+<<<<<<< HEAD
                                 <p className="text-2xl font-bold">{report.statistics.avgPain.toFixed(1)}</p>
+=======
+                                <p className="text-2xl font-bold">{typeof report.statistics?.avgPain === 'number' && isFinite(report.statistics.avgPain) ? report.statistics.avgPain.toFixed(1) : 'N/A'}</p>
+>>>>>>> v3
                                 <p className="text-xs text-text-muted">Avg Pain /10</p>
                             </CardContent>
                         </Card>
                         <Card variant="elevated">
                             <CardContent className="pt-4 text-center">
                                 <Moon className="w-6 h-6 text-secondary mx-auto mb-2" />
+<<<<<<< HEAD
                                 <p className="text-2xl font-bold">{report.statistics.avgSleep.toFixed(1)}h</p>
+=======
+                                <p className="text-2xl font-bold">{typeof report.statistics?.avgSleep === 'number' && isFinite(report.statistics.avgSleep) ? `${report.statistics.avgSleep.toFixed(1)}h` : 'N/A'}</p>
+>>>>>>> v3
                                 <p className="text-xs text-text-muted">Avg Sleep</p>
                             </CardContent>
                         </Card>

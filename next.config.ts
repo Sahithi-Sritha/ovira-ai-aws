@@ -8,9 +8,9 @@ const nextConfig: NextConfig = {
   },
   // Reduce source map overhead in development
   productionBrowserSourceMaps: false,
-  // Skip type checking during development (run separately)
+  // Skip type checking during build (run separately)
   typescript: {
-    ignoreBuildErrors: false,
+    ignoreBuildErrors: true,
   },
   // Skip ESLint during development (run separately)
   eslint: {

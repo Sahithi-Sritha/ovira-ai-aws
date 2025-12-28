@@ -38,7 +38,11 @@ export default function ReportsPage() {
 
     useEffect(() => {
         const fetchLogs = async () => {
+<<<<<<< HEAD
             if (!user) return;
+=======
+            if (!user || !db) return;
+>>>>>>> v3
 
             try {
                 const logsRef = collection(db, 'users', user.uid, 'logs');

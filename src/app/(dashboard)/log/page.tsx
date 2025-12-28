@@ -37,7 +37,11 @@ export default function LogPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+<<<<<<< HEAD
         if (!user) return;
+=======
+        if (!user || !db) return;
+>>>>>>> v3
 
         setLoading(true);
 
@@ -154,8 +158,13 @@ export default function LogPage() {
                                     type="button"
                                     onClick={() => setFlowLevel(level.value as typeof flowLevel)}
                                     className={`p-4 rounded-xl border-2 text-center transition-all ${flowLevel === level.value
+<<<<<<< HEAD
                                             ? 'border-primary bg-primary/10'
                                             : 'border-border hover:border-primary/50'
+=======
+                                        ? 'border-primary bg-primary/10'
+                                        : 'border-border hover:border-primary/50'
+>>>>>>> v3
                                         }`}
                                 >
                                     <div
@@ -214,8 +223,13 @@ export default function LogPage() {
                                     type="button"
                                     onClick={() => setMood(option.value as typeof mood)}
                                     className={`p-3 rounded-xl border-2 text-center transition-all ${mood === option.value
+<<<<<<< HEAD
                                             ? 'border-primary bg-primary/10'
                                             : 'border-border hover:border-primary/50'
+=======
+                                        ? 'border-primary bg-primary/10'
+                                        : 'border-border hover:border-primary/50'
+>>>>>>> v3
                                         }`}
                                 >
                                     <span className="text-2xl block mb-1">{option.emoji}</span>
@@ -240,8 +254,13 @@ export default function LogPage() {
                                     type="button"
                                     onClick={() => setEnergyLevel(level.value as typeof energyLevel)}
                                     className={`p-4 rounded-xl border-2 text-center transition-all ${energyLevel === level.value
+<<<<<<< HEAD
                                             ? 'border-primary bg-primary/10'
                                             : 'border-border hover:border-primary/50'
+=======
+                                        ? 'border-primary bg-primary/10'
+                                        : 'border-border hover:border-primary/50'
+>>>>>>> v3
                                         }`}
                                 >
                                     <span className="text-2xl block mb-1">{level.icon}</span>
@@ -296,8 +315,13 @@ export default function LogPage() {
                                     type="button"
                                     onClick={() => toggleSymptom(symptom)}
                                     className={`px-4 py-2 rounded-full text-sm transition-all ${symptoms.includes(symptom)
+<<<<<<< HEAD
                                             ? 'bg-primary text-white'
                                             : 'bg-surface-elevated text-text-secondary hover:bg-primary/10'
+=======
+                                        ? 'bg-primary text-white'
+                                        : 'bg-surface-elevated text-text-secondary hover:bg-primary/10'
+>>>>>>> v3
                                         }`}
                                 >
                                     {symptom}

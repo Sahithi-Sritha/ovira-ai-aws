@@ -70,7 +70,11 @@ export async function POST(request: NextRequest) {
 
         // Clean the API key (remove any whitespace or quotes)
         const cleanApiKey = apiKey.trim().replace(/['"]/g, '');
+<<<<<<< HEAD
         console.log('API Key length:', cleanApiKey.length, 'First 8 chars:', cleanApiKey.substring(0, 8));
+=======
+        console.log('API key configured:', cleanApiKey.length >= 30 ? 'valid length' : 'too short');
+>>>>>>> v3
 
         // Build the conversation for the API
         let contextualPrompt = SYSTEM_PROMPT;
