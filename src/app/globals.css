@@ -121,3 +121,37 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--text-muted));
 }
+
+/* Print Styles for Health Report */
+@media print {
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+
+  aside,
+  header {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  .lg\:pl-64 {
+    padding-left: 0 !important;
+  }
+
+  @page {
+    margin: 1cm;
+    size: A4;
+  }
+}

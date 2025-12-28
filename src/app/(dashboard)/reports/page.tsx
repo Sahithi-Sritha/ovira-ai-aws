@@ -153,6 +153,28 @@ export default function ReportsPage() {
                 </Button>
             </div>
 
+            {/* AI Health Report Card */}
+            <Link href="/health-report">
+                <Card variant="gradient" hover className="group cursor-pointer overflow-hidden">
+                    <CardContent className="pt-6">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <FileText className="w-7 h-7 text-primary" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-bold text-text-primary">Generate AI Health Report</h3>
+                                <p className="text-text-secondary text-sm">
+                                    Create a comprehensive, doctor-friendly report with cycle analysis, risk assessment & personalized recommendations
+                                </p>
+                            </div>
+                            <div className="text-text-muted group-hover:text-primary group-hover:translate-x-1 transition-all">
+                                →
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </Link>
+
             {/* Stats Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card variant="elevated">
