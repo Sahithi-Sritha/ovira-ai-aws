@@ -40,7 +40,7 @@ export default function DashboardPage() {
             if (!user || !db) return;
 
             try {
-                const logsRef = collection(db, 'users', user.uid, 'logs');
+                const logsRef = collection(db!, 'users', user.uid, 'logs');
                 const q = query(logsRef, orderBy('date', 'desc'), limit(7));
                 const snapshot = await getDocs(q);
 
