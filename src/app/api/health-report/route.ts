@@ -103,11 +103,7 @@ export async function POST(request: NextRequest) {
         // Try to generate AI-powered report using REST API
         try {
             const apiKey = process.env.GEMINI_API_KEY!.trim().replace(/['"]/g, '');
-<<<<<<< HEAD
-            console.log('Health Report - Using API key:', apiKey.substring(0, 8) + '...');
-=======
             console.log('Health Report - API key is configured');
->>>>>>> v3
 
             const dataContext = `
 USER PROFILE:
@@ -209,10 +205,6 @@ CALCULATED STATISTICS:
             // AI failed - log it and return fallback
             console.error('AI generation failed, using fallback:', aiError);
             return NextResponse.json(generateFallbackReport(logs, userProfile, stats));
-<<<<<<< HEAD
-            return NextResponse.json(generateFallbackReport(logs, userProfile, stats));
-=======
->>>>>>> v3
         }
     } catch (error) {
         console.error('Health Report API error:', error);
