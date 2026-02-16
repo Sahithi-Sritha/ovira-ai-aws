@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { chatWithAI, getFallbackResponse } from '@/lib/aws/bedrock';
 
 const SYSTEM_PROMPT = `You are Ovira AI, a compassionate and knowledgeable women's health assistant. Your role is to provide supportive, educational information about women's health topics including menstrual health, reproductive wellness, and general well-being.
 
@@ -11,6 +12,7 @@ IMPORTANT GUIDELINES:
 6. If asked about emergencies or severe symptoms, immediately advise seeking medical care
 7. Keep responses concise but informative (2-3 paragraphs max)
 8. Use simple, accessible language
+9. This is DECISION-SUPPORT only, not medical advice
 
 TOPICS YOU CAN HELP WITH:
 - Menstrual cycle tracking and understanding
@@ -27,29 +29,7 @@ TOPICS TO REDIRECT TO DOCTORS:
 - Pregnancy-related medical advice
 - Fertility treatments
 
-Remember: You are a supportive companion, not a replacement for medical care.`;
-
-// Fallback responses for when AI is not available
-const FALLBACK_RESPONSES: Record<string, string> = {
-    default: "I'm here to help with women's health questions. While I'm having trouble connecting to my AI service right now, I can tell you that it's always a good idea to track your symptoms regularly and consult with a healthcare provider for personalized advice. Is there something specific you'd like to know about?",
-    pain: "Period pain is very common, but if it's severe or affecting your daily life, please consult a healthcare provider. Some general tips: apply heat to your lower abdomen, stay hydrated, gentle exercise can help, and over-the-counter pain relievers may provide relief. Always follow the dosage instructions.",
-    mood: "Mood changes during your cycle are normal due to hormonal fluctuations. Self-care strategies like regular sleep, exercise, and stress management can help. If mood changes are severe or impacting your life significantly, consider speaking with a healthcare provider about PMDD.",
-    cycle: "A typical menstrual cycle lasts 21-35 days, with bleeding lasting 2-7 days. If your cycle is irregular, very heavy, or you're experiencing unusual symptoms, it's worth discussing with your doctor.",
-};
-
-function getFallbackResponse(message: string): string {
-    const lowerMessage = message.toLowerCase();
-    if (lowerMessage.includes('pain') || lowerMessage.includes('cramp')) {
-        return FALLBACK_RESPONSES.pain;
-    }
-    if (lowerMessage.includes('mood') || lowerMessage.includes('feel')) {
-        return FALLBACK_RESPONSES.mood;
-    }
-    if (lowerMessage.includes('cycle') || lowerMessage.includes('period')) {
-        return FALLBACK_RESPONSES.cycle;
-    }
-    return FALLBACK_RESPONSES.default;
-}
+Remember: You are a supportive companion providing decision-support information, not a replacement for medical care.`;
 
 export async function POST(request: NextRequest) {
     try {
@@ -59,109 +39,46 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Message is required' }, { status: 400 });
         }
 
-        const apiKey = process.env.GEMINI_API_KEY;
-
-        if (!apiKey) {
-            console.log('No GEMINI_API_KEY found, using fallback response');
+        // Check if AWS Bedrock is configured
+        if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+            console.log('AWS credentials not configured, using fallback response');
             return NextResponse.json({
                 message: getFallbackResponse(message),
             });
         }
 
-        // Clean the API key (remove any whitespace or quotes)
-        const cleanApiKey = apiKey.trim().replace(/['"]/g, '');
-        console.log('API key configured:', cleanApiKey.length >= 30 ? 'valid length' : 'too short');
-
-        // Build the conversation for the API
-        let contextualPrompt = SYSTEM_PROMPT;
+        // Build user context string
+        let contextString = '';
         if (userContext?.ageRange) {
-            contextualPrompt += `\n\nUser context: Age range ${userContext.ageRange}`;
+            contextString += `User age range: ${userContext.ageRange}`;
         }
         if (userContext?.conditions?.length > 0) {
-            contextualPrompt += `, known conditions: ${userContext.conditions.join(', ')}`;
+            contextString += `, Known conditions: ${userContext.conditions.join(', ')}`;
         }
 
-        // Build message history
-        const contents = [
-            {
-                role: 'user',
-                parts: [{ text: 'You are Ovira AI. Please follow these instructions: ' + contextualPrompt }]
-            },
-            {
-                role: 'model',
-                parts: [{ text: 'I understand. I am Ovira AI, a compassionate women\'s health assistant. How can I help you today?' }]
-            }
-        ];
-
-        // Add conversation history
+        // Build conversation history for Bedrock
+        const conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
         if (history && Array.isArray(history)) {
-            for (const msg of history) {
-                contents.push({
-                    role: msg.role === 'user' ? 'user' : 'model',
-                    parts: [{ text: msg.content }]
+            for (const msg of history.slice(-10)) { // Keep last 10 messages for context
+                conversationHistory.push({
+                    role: msg.role === 'user' ? 'user' : 'assistant',
+                    content: msg.content,
                 });
             }
         }
 
-        // Add current message
-        contents.push({
-            role: 'user',
-            parts: [{ text: message }]
-        });
-
-        // Try multiple model names
-        const modelNames = ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.0-pro'];
-        let lastError: any = null;
-
-        for (const modelName of modelNames) {
-            try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${cleanApiKey}`;
-
-                console.log(`Trying model: ${modelName}`);
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        contents: contents,
-                        generationConfig: {
-                            temperature: 0.7,
-                            maxOutputTokens: 1024,
-                        },
-                    }),
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    console.error(`Model ${modelName} failed:`, data);
-                    lastError = data;
-                    continue; // Try next model
-                }
-
-                // Success! Extract the response
-                const aiMessage = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-                if (aiMessage) {
-                    console.log(`Success with model: ${modelName}`);
-                    return NextResponse.json({ message: aiMessage });
-                } else {
-                    console.error('No text in response:', data);
-                    lastError = data;
-                }
-            } catch (modelError) {
-                console.error(`Error with model ${modelName}:`, modelError);
-                lastError = modelError;
-            }
+        try {
+            // Call Bedrock AI
+            const aiResponse = await chatWithAI(message, conversationHistory, contextString);
+            
+            return NextResponse.json({ message: aiResponse });
+        } catch (aiError) {
+            console.error('Bedrock AI error:', aiError);
+            // Return fallback response if AI fails
+            return NextResponse.json({
+                message: getFallbackResponse(message),
+            });
         }
-
-        // All models failed - log the last error and return fallback
-        console.error('All models failed. Last error:', lastError);
-        return NextResponse.json({
-            message: getFallbackResponse(message),
-        });
 
     } catch (error) {
         console.error('Chat API error:', error);

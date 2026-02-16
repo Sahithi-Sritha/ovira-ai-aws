@@ -2,21 +2,23 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
-    User,
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword,
-    signOut,
-    signInWithPopup,
-    onAuthStateChanged,
-    sendPasswordResetEmail,
-    updateProfile,
-} from 'firebase/auth';
-import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
-import { auth, googleProvider, db } from '@/lib/firebase/firebase';
+    signUpUser,
+    signInUser,
+    signOutUser,
+    getCurrentUser,
+    resetPassword as cognitoResetPassword,
+    getCognitoErrorMessage,
+    CognitoAuthUser,
+} from '@/lib/aws/cognito';
+import {
+    createUserProfile,
+    getUserProfile,
+    updateUserProfile as updateUserProfileDB,
+} from '@/lib/aws/dynamodb';
 import { UserProfile, OnboardingData } from '@/types';
 
 interface AuthContextType {
-    user: User | null;
+    user: CognitoAuthUser | null;
     userProfile: UserProfile | null;
     loading: boolean;
     error: string | null;
@@ -33,32 +35,24 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<CognitoAuthUser | null>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
 
-    // Ensure we're mounted before Firebase operations
+    // Ensure we're mounted before operations
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    // Fetch user profile from Firestore
-    const fetchUserProfile = async (uid: string) => {
-        if (!db) return;
+    // Fetch user profile from DynamoDB
+    const fetchUserProfile = async (userId: string) => {
         try {
-            const docRef = doc(db, 'users', uid);
-            const docSnap = await getDoc(docRef);
-
-            if (docSnap.exists()) {
-                setUserProfile(docSnap.data() as UserProfile);
-            } else {
-                setUserProfile(null);
-            }
+            const profile = await getUserProfile(userId);
+            setUserProfile(profile);
         } catch (err: any) {
             console.error('Error fetching user profile:', err);
-            // Don't show error for offline - might be new user
             if (!err.message?.includes('offline')) {
                 setError('Unable to load profile. Please check your connection.');
             }
@@ -66,60 +60,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Listen to auth state changes
+    // Check for current user on mount
     useEffect(() => {
-        if (!mounted || !auth) {
+        if (!mounted) {
             setLoading(false);
             return;
         }
 
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            setUser(user);
+        const checkCurrentUser = async () => {
+            try {
+                const currentUser = await getCurrentUser();
+                setUser(currentUser);
 
-            if (user) {
-                await fetchUserProfile(user.uid);
-            } else {
+                if (currentUser) {
+                    await fetchUserProfile(currentUser.username);
+                } else {
+                    setUserProfile(null);
+                }
+            } catch (err) {
+                console.error('Error checking current user:', err);
+                setUser(null);
                 setUserProfile(null);
+            } finally {
+                setLoading(false);
             }
+        };
 
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
+        checkCurrentUser();
     }, [mounted]);
 
     const clearError = () => setError(null);
 
     // Sign up with email/password
     const signUp = async (email: string, password: string, displayName: string) => {
-        if (!auth || !db) {
-            setError('Authentication service not available. Please refresh the page.');
-            throw new Error('Firebase not initialized');
-        }
-
         try {
-            const result = await createUserWithEmailAndPassword(auth, email, password);
+            const cognitoUser = await signUpUser(email, password, displayName);
 
-            // Update display name
-            await updateProfile(result.user, { displayName });
-
-            // Create initial user profile
+            // Create initial user profile in DynamoDB
             const profile: Partial<UserProfile> = {
-                uid: result.user.uid,
-                email: result.user.email!,
+                uid: cognitoUser.getUsername(),
+                email: email,
                 displayName,
                 onboardingComplete: false,
-                createdAt: Timestamp.now(),
+                createdAt: new Date().toISOString() as any,
                 averageCycleLength: 28,
                 conditions: [],
                 language: 'en',
                 ageRange: '25-34',
             };
 
-            await setDoc(doc(db, 'users', result.user.uid), profile);
+            await createUserProfile(profile);
+            
+            // Sign in the user after signup
+            const authUser = await signInUser(email, password);
+            setUser(authUser);
             setUserProfile(profile as UserProfile);
         } catch (err: any) {
-            const message = getFirebaseErrorMessage(err.code);
+            const message = getCognitoErrorMessage(err);
             setError(message);
             throw err;
         }
@@ -127,73 +124,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Sign in with email/password
     const signIn = async (email: string, password: string) => {
-        if (!auth) {
-            setError('Authentication service not available. Please refresh the page.');
-            throw new Error('Firebase not initialized');
-        }
-
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            const authUser = await signInUser(email, password);
+            setUser(authUser);
+            await fetchUserProfile(authUser.username);
         } catch (err: any) {
-            const message = getFirebaseErrorMessage(err.code);
+            const message = getCognitoErrorMessage(err);
             setError(message);
             throw err;
         }
     };
 
-    // Sign in with Google
+    // Sign in with Google (placeholder - requires Cognito Identity Pool setup)
     const signInWithGoogle = async () => {
-        if (!auth || !googleProvider || !db) {
-            setError('Authentication service not available. Please refresh the page.');
-            throw new Error('Firebase not initialized');
-        }
-
-        try {
-            const result = await signInWithPopup(auth, googleProvider);
-
-            // Check if user profile exists
-            const docRef = doc(db, 'users', result.user.uid);
-            const docSnap = await getDoc(docRef);
-
-            if (!docSnap.exists()) {
-                // Create profile for new Google user
-                const profile: Partial<UserProfile> = {
-                    uid: result.user.uid,
-                    email: result.user.email!,
-                    displayName: result.user.displayName || undefined,
-                    photoURL: result.user.photoURL || undefined,
-                    onboardingComplete: false,
-                    createdAt: Timestamp.now(),
-                    averageCycleLength: 28,
-                    conditions: [],
-                    language: 'en',
-                    ageRange: '25-34',
-                };
-
-                await setDoc(docRef, profile);
-                setUserProfile(profile as UserProfile);
-            }
-        } catch (err: any) {
-            const message = getFirebaseErrorMessage(err.code);
-            setError(message);
-            throw err;
-        }
+        setError('Google sign-in requires additional AWS Cognito Identity Pool configuration. Please use email/password for now.');
+        throw new Error('Google sign-in not yet configured');
     };
 
     // Logout
     const logout = async () => {
-        if (!auth) throw new Error('Firebase not initialized');
-        await signOut(auth);
+        await signOutUser();
+        setUser(null);
         setUserProfile(null);
     };
 
     // Reset password
     const resetPassword = async (email: string) => {
-        if (!auth) throw new Error('Firebase not initialized');
         try {
-            await sendPasswordResetEmail(auth, email);
+            await cognitoResetPassword(email);
         } catch (err: any) {
-            const message = getFirebaseErrorMessage(err.code);
+            const message = getCognitoErrorMessage(err);
             setError(message);
             throw err;
         }
@@ -201,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Complete onboarding
     const completeOnboarding = async (data: OnboardingData) => {
-        if (!user || !db) throw new Error('No user logged in or Firebase not initialized');
+        if (!user) throw new Error('No user logged in');
 
         const updates: Partial<UserProfile> = {
             ageRange: data.ageRange,
@@ -210,15 +170,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             onboardingComplete: true,
         };
 
-        await setDoc(doc(db, 'users', user.uid), updates, { merge: true });
-
+        await updateUserProfileDB(user.username, updates);
         setUserProfile((prev) => prev ? { ...prev, ...updates } : null);
     };
 
     // Refresh user profile
     const refreshUserProfile = async () => {
         if (user) {
-            await fetchUserProfile(user.uid);
+            await fetchUserProfile(user.username);
         }
     };
 
@@ -250,31 +209,4 @@ export function useAuth() {
         throw new Error('useAuth must be used within an AuthProvider');
     }
     return context;
-}
-
-function getFirebaseErrorMessage(code: string): string {
-    switch (code) {
-        case 'auth/email-already-in-use':
-            return 'An account with this email already exists';
-        case 'auth/invalid-email':
-            return 'Invalid email address';
-        case 'auth/user-disabled':
-            return 'This account has been disabled';
-        case 'auth/user-not-found':
-            return 'No account found with this email';
-        case 'auth/wrong-password':
-            return 'Incorrect password';
-        case 'auth/weak-password':
-            return 'Password is too weak. Use at least 6 characters';
-        case 'auth/too-many-requests':
-            return 'Too many attempts. Please try again later';
-        case 'auth/popup-closed-by-user':
-            return 'Sign-in was cancelled';
-        case 'auth/network-request-failed':
-            return 'Network error. Please check your connection';
-        case 'auth/operation-not-allowed':
-            return 'This sign-in method is not enabled. Please contact support.';
-        default:
-            return 'An error occurred. Please try again';
-    }
 }

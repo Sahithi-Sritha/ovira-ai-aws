@@ -1,5 +1,3 @@
-import { Timestamp } from 'firebase/firestore';
-
 // User Profile
 export interface UserProfile {
     uid: string;
@@ -10,8 +8,8 @@ export interface UserProfile {
     conditions: string[];
     language: string;
     onboardingComplete: boolean;
-    createdAt: Timestamp;
-    lastPeriodStart?: Timestamp;
+    createdAt: string; // ISO 8601 string
+    lastPeriodStart?: string; // ISO 8601 string
     averageCycleLength: number;
 }
 
@@ -19,7 +17,7 @@ export interface UserProfile {
 export interface SymptomLog {
     id: string;
     userId: string;
-    date: Timestamp;
+    date: string; // ISO 8601 string
     flowLevel: 'none' | 'light' | 'medium' | 'heavy';
     painLevel: number; // 0-10
     mood: 'great' | 'good' | 'neutral' | 'bad' | 'terrible';
@@ -27,17 +25,17 @@ export interface SymptomLog {
     sleepHours: number;
     notes?: string;
     symptoms?: string[];
-    createdAt: Timestamp;
-    updatedAt?: Timestamp;
+    createdAt: string; // ISO 8601 string
+    updatedAt?: string; // ISO 8601 string
 }
 
 // Health Report
 export interface HealthReport {
     id: string;
     userId: string;
-    generatedAt: Timestamp;
-    periodStart: Timestamp;
-    periodEnd: Timestamp;
+    generatedAt: string; // ISO 8601 string
+    periodStart: string; // ISO 8601 string
+    periodEnd: string; // ISO 8601 string
     pdfUrl: string;
     riskFlags: RiskFlag[];
     summary?: string;
@@ -56,7 +54,7 @@ export interface ChatMessage {
     id: string;
     role: 'user' | 'assistant';
     content: string;
-    timestamp: Timestamp;
+    timestamp: string; // ISO 8601 string
 }
 
 // Onboarding Data

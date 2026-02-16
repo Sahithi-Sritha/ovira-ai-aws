@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateHealthReportSummary } from '@/lib/aws/bedrock';
 
 interface SymptomLogInput {
     id: string;
@@ -25,61 +26,6 @@ interface HealthReportRequest {
     userProfile: UserProfileInput;
 }
 
-const REPORT_PROMPT = `You are a medical data analyst AI. Analyze the provided menstrual health symptom logs and generate a comprehensive, doctor-friendly health report.
-
-IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, just pure JSON.
-
-Based on the symptom data provided, generate a report with this exact JSON structure:
-{
-    "executiveSummary": "2-3 sentence professional summary for healthcare providers",
-    "cycleInsights": {
-        "overallPattern": "Description of cycle patterns observed",
-        "averagePainLevel": 0.0,
-        "flowPatternDescription": "Description of flow patterns",
-        "cycleRegularity": "regular" | "irregular" | "insufficient_data"
-    },
-    "symptomAnalysis": {
-        "mostFrequentSymptoms": [{"symptom": "name", "count": 0, "percentage": 0}],
-        "painTrend": "increasing" | "decreasing" | "stable" | "variable",
-        "moodPattern": "Description of mood patterns",
-        "sleepQuality": "Description of sleep patterns",
-        "energyPattern": "Description of energy patterns",
-        "notableCorrelations": ["correlation 1", "correlation 2"]
-    },
-    "riskAssessment": [
-        {
-            "condition": "Condition name",
-            "riskLevel": "low" | "medium" | "high",
-            "confidence": "low" | "medium" | "high",
-            "indicators": ["indicator 1", "indicator 2"],
-            "recommendation": "What to do"
-        }
-    ],
-    "recommendations": [
-        "Detailed recommendation 1",
-        "Detailed recommendation 2"
-    ],
-    "questionsForDoctor": [
-        "Suggested question 1 to ask healthcare provider",
-        "Suggested question 2"
-    ],
-    "lifestyleTips": [
-        "Personalized tip based on data",
-        "Another personalized tip"
-    ],
-    "urgentFlags": ["Any urgent concerns that need immediate attention"] or []
-}
-
-Analyze patterns carefully:
-- Look for anemia indicators (heavy flow + fatigue)
-- Check for PCOS signs (irregular cycles, specific symptoms)
-- Identify endometriosis markers (severe pain patterns)
-- Note mood correlations with cycle phases
-- Identify sleep and energy patterns
-- Find symptom clusters and correlations
-
-Be thorough but avoid false alarms. Base assessments on actual data patterns.`;
-
 export async function POST(request: NextRequest) {
     try {
         const { logs, userProfile }: HealthReportRequest = await request.json();
@@ -94,24 +40,25 @@ export async function POST(request: NextRequest) {
         // Calculate basic statistics
         const stats = calculateStats(logs);
 
-        // Check for Gemini API key - if missing, return fallback immediately
-        if (!process.env.GEMINI_API_KEY) {
-            console.log('No GEMINI_API_KEY found, returning fallback report');
+        // Check for AWS credentials - if missing, return fallback immediately
+        if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+            console.log('AWS credentials not configured, returning fallback report');
             return NextResponse.json(generateFallbackReport(logs, userProfile, stats));
         }
 
-        // Try to generate AI-powered report using REST API
+        // Try to generate AI-powered report using Bedrock
         try {
-            const apiKey = process.env.GEMINI_API_KEY!.trim().replace(/['"]/g, '');
-            console.log('Health Report - API key is configured');
+            console.log('Health Report - Generating with Amazon Bedrock');
 
-            const dataContext = `
+            const userContext = `
 USER PROFILE:
 - Name: ${userProfile.displayName || 'Patient'}
 - Age Range: ${userProfile.ageRange || 'Not specified'}
 - Known Conditions: ${userProfile.conditions?.join(', ') || 'None reported'}
 - Average Cycle Length: ${userProfile.averageCycleLength || 28} days
+`;
 
+            const symptomData = `
 SYMPTOM LOGS (${logs.length} entries):
 ${logs.slice(0, 10).map(log => `
 Date: ${log.date}
@@ -134,76 +81,25 @@ CALCULATED STATISTICS:
 - Most Common Symptoms: ${stats.topSymptoms.join(', ') || 'None recorded'}
 `;
 
-            // Try multiple model names
-            const modelNames = ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.0-pro'];
+            const reportData = await generateHealthReportSummary(symptomData, userContext);
 
-            for (const modelName of modelNames) {
-                try {
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            // Add metadata
+            reportData.generatedAt = new Date().toISOString();
+            reportData.periodStart = logs[logs.length - 1]?.date;
+            reportData.periodEnd = logs[0]?.date;
+            reportData.totalLogsAnalyzed = logs.length;
+            reportData.patientInfo = {
+                name: userProfile.displayName || 'Patient',
+                ageRange: userProfile.ageRange,
+                conditions: userProfile.conditions || [],
+                averageCycleLength: userProfile.averageCycleLength || 28
+            };
+            reportData.statistics = stats;
 
-                    console.log(`Health Report - Trying model: ${modelName}`);
-
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{
-                                parts: [
-                                    { text: REPORT_PROMPT },
-                                    { text: dataContext }
-                                ]
-                            }],
-                            generationConfig: {
-                                temperature: 0.3,
-                                maxOutputTokens: 2048,
-                            },
-                        }),
-                    });
-
-                    const data = await response.json();
-
-                    if (!response.ok) {
-                        console.error(`Model ${modelName} failed:`, JSON.stringify(data).substring(0, 200));
-                        continue;
-                    }
-
-                    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-                    if (responseText) {
-                        console.log(`Health Report - Success with model: ${modelName}`);
-
-                        // Parse JSON from response
-                        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-                        if (jsonMatch) {
-                            const reportData = JSON.parse(jsonMatch[0]);
-
-                            // Add metadata
-                            reportData.generatedAt = new Date().toISOString();
-                            reportData.periodStart = logs[logs.length - 1]?.date;
-                            reportData.periodEnd = logs[0]?.date;
-                            reportData.totalLogsAnalyzed = logs.length;
-                            reportData.patientInfo = {
-                                name: userProfile.displayName || 'Patient',
-                                ageRange: userProfile.ageRange,
-                                conditions: userProfile.conditions || [],
-                                averageCycleLength: userProfile.averageCycleLength || 28
-                            };
-                            reportData.statistics = stats;
-
-                            return NextResponse.json(reportData);
-                        }
-                    }
-                } catch (modelError) {
-                    console.error(`Error with model ${modelName}:`, modelError);
-                }
-            }
-
-            // All models failed - use fallback
-            console.log('All AI models failed, using fallback report');
-            return NextResponse.json(generateFallbackReport(logs, userProfile, stats));
+            return NextResponse.json(reportData);
         } catch (aiError) {
             // AI failed - log it and return fallback
-            console.error('AI generation failed, using fallback:', aiError);
+            console.error('Bedrock AI generation failed, using fallback:', aiError);
             return NextResponse.json(generateFallbackReport(logs, userProfile, stats));
         }
     } catch (error) {
