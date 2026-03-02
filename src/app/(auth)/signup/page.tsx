@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
@@ -23,6 +24,7 @@ export default function SignupPage() {
     const [signupStep, setSignupStep] = useState<SignupStep>('initial');
 
     const router = useRouter();
+    const { refreshUser } = useAuth();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -63,7 +65,18 @@ export default function SignupPage() {
             setSignupStep('verify-email');
         } catch (err: any) {
             console.error('Signup error:', err);
-            setError(getAmplifyErrorMessage(err.message || err.error));
+            const errorMessage = err.message || err.error || '';
+            
+            // If user already exists, show helpful message with login link
+            if (errorMessage.includes('UsernameExistsException') || errorMessage.includes('already exists')) {
+                setError('An account with this email already exists. Please sign in instead.');
+                // Redirect to login after 2 seconds
+                setTimeout(() => {
+                    router.push('/login');
+                }, 2000);
+            } else {
+                setError(getAmplifyErrorMessage(errorMessage));
+            }
         } finally {
             setLoading(false);
         }
@@ -102,9 +115,33 @@ export default function SignupPage() {
                 localStorage.setItem('idToken', loginData.authenticationResult.IdToken);
                 localStorage.setItem('accessToken', loginData.authenticationResult.AccessToken);
                 localStorage.setItem('refreshToken', loginData.authenticationResult.RefreshToken);
+                localStorage.setItem('userEmail', email);
+                
+                // Create user profile in DynamoDB if it doesn't exist
+                try {
+                    const { createUserProfile } = await import('@/lib/aws/dynamodb');
+                    await createUserProfile({
+                        uid: email,
+                        email: email,
+                        displayName: name,
+                        onboardingComplete: false,
+                        createdAt: new Date().toISOString(),
+                    });
+                } catch (profileError: any) {
+                    // Profile might already exist, that's okay
+                    console.log('Profile creation note:', profileError.message);
+                }
+                
+                // Wait for AuthContext to initialize user state
+                await refreshUser();
+                
+                // Small delay to ensure state is set
+                await new Promise(resolve => setTimeout(resolve, 300));
                 
                 setSignupStep('complete');
                 router.push('/onboarding');
+            } else {
+                throw new Error('Login failed after verification');
             }
         } catch (err: any) {
             console.error('Verification error:', err);

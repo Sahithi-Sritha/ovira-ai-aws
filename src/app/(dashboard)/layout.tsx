@@ -14,12 +14,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     useEffect(() => {
+        console.log('Dashboard layout - Auth state:', { 
+            loading, 
+            hasUser: !!user, 
+            hasProfile: !!userProfile,
+            onboardingComplete: userProfile?.onboardingComplete 
+        });
+        
         if (!loading) {
             if (!user) {
+                console.log('No user, redirecting to login');
                 router.push('/login');
-            } else if (userProfile && !userProfile.onboardingComplete) {
-                router.push('/onboarding');
             }
+            // Temporarily disable onboarding redirect to debug
+            // else if (userProfile && userProfile.onboardingComplete === false) {
+            //     console.log('Onboarding incomplete, redirecting to onboarding');
+            //     router.push('/onboarding');
+            // }
         }
     }, [user, userProfile, loading, router]);
 

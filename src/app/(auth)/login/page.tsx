@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
@@ -20,6 +21,7 @@ export default function LoginPage() {
     const [session, setSession] = useState<string>('');
 
     const router = useRouter();
+    const { refreshUser } = useAuth();
 
     const handleEmailPasswordSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -46,12 +48,21 @@ export default function LoginPage() {
                 setSession(data.session);
                 setAuthStep('otp-challenge');
             } else if (data.authenticationResult) {
-                // Store tokens
+                // Store tokens in localStorage
                 localStorage.setItem('idToken', data.authenticationResult.IdToken);
                 localStorage.setItem('accessToken', data.authenticationResult.AccessToken);
                 localStorage.setItem('refreshToken', data.authenticationResult.RefreshToken);
                 
-                // Redirect immediately
+                // Also store email for session reconstruction
+                localStorage.setItem('userEmail', email);
+                
+                // Wait for AuthContext to initialize user state
+                await refreshUser();
+                
+                // Small delay to ensure state is set
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                // Redirect after state is set
                 router.push('/dashboard');
             } else {
                 throw new Error('No authentication result or challenge received');
@@ -93,13 +104,20 @@ export default function LoginPage() {
                 localStorage.setItem('idToken', data.authenticationResult.IdToken);
                 localStorage.setItem('accessToken', data.authenticationResult.AccessToken);
                 localStorage.setItem('refreshToken', data.authenticationResult.RefreshToken);
+                localStorage.setItem('userEmail', email);
+                
+                // Wait for AuthContext to initialize user state
+                await refreshUser();
+                
+                // Small delay to ensure state is set
+                await new Promise(resolve => setTimeout(resolve, 300));
                 
                 // Clear form data
                 setEmail('');
                 setPassword('');
                 setOtpCode('');
                 
-                // Redirect immediately
+                // Redirect after state is set
                 router.push('/dashboard');
             } else {
                 throw new Error('No authentication result received');

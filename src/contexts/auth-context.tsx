@@ -23,12 +23,13 @@ interface AuthContextType {
     loading: boolean;
     error: string | null;
     signUp: (email: string, password: string, displayName: string) => Promise<void>;
-    signIn: (email: string, password: string) => Promise<void>;
+    signIn: (email: string, password: string) => Promise<CognitoAuthUser>;
     signInWithGoogle: () => Promise<void>;
     logout: () => Promise<void>;
     resetPassword: (email: string) => Promise<void>;
     completeOnboarding: (data: OnboardingData) => Promise<void>;
     refreshUserProfile: () => Promise<void>;
+    refreshUser: () => Promise<CognitoAuthUser | null>;
     clearError: () => void;
 }
 
@@ -49,7 +50,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Fetch user profile from DynamoDB
     const fetchUserProfile = async (userId: string) => {
         try {
-            const profile = await getUserProfile(userId);
+            let profile = await getUserProfile(userId);
+            
+            // If profile doesn't exist, create a basic one
+            if (!profile) {
+                console.log('Creating new user profile for:', userId);
+                await createUserProfile({
+                    uid: userId,
+                    email: userId,
+                    displayName: userId.split('@')[0],
+                    onboardingComplete: false,
+                    createdAt: new Date().toISOString(),
+                });
+                
+                // Fetch the newly created profile
+                profile = await getUserProfile(userId);
+            }
+            
             setUserProfile(profile);
         } catch (err: any) {
             console.error('Error fetching user profile:', err);
@@ -60,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Check for current user on mount
+    // Check for current user on mount - initialize from stored tokens
     useEffect(() => {
         if (!mounted) {
             setLoading(false);
@@ -69,12 +86,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const checkCurrentUser = async () => {
             try {
-                const currentUser = await getCurrentUser();
-                setUser(currentUser);
-
-                if (currentUser) {
-                    await fetchUserProfile(currentUser.username);
+                console.log('Checking current user on mount');
+                // Check for stored tokens first
+                const idToken = localStorage.getItem('idToken');
+                const accessToken = localStorage.getItem('accessToken');
+                const userEmail = localStorage.getItem('userEmail');
+                
+                console.log('Stored auth data:', { 
+                    hasIdToken: !!idToken, 
+                    hasAccessToken: !!accessToken,
+                    userEmail 
+                });
+                
+                if (idToken && accessToken && userEmail) {
+                    // Create user object from stored data
+                    const authUser: CognitoAuthUser = {
+                        username: userEmail,
+                        email: userEmail,
+                        attributes: { email: userEmail },
+                        session: null as any, // We have tokens but not full session object
+                    };
+                    
+                    console.log('Setting user from stored tokens:', authUser);
+                    setUser(authUser);
+                    await fetchUserProfile(userEmail);
                 } else {
+                    console.log('No stored auth data, user is null');
+                    setUser(null);
                     setUserProfile(null);
                 }
             } catch (err) {
@@ -151,6 +189,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             setUser(authUser);
             await fetchUserProfile(email);
+            
+            // Return the user object so caller can verify state is set
+            return authUser;
         } catch (err: any) {
             const message = err.message || 'An error occurred during signin';
             setError(message);
@@ -167,6 +208,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Logout
     const logout = async () => {
         await signOutUser();
+        // Clear all stored auth data
+        localStorage.removeItem('idToken');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('userEmail');
         setUser(null);
         setUserProfile(null);
     };
@@ -186,6 +232,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const completeOnboarding = async (data: OnboardingData) => {
         if (!user) throw new Error('No user logged in');
 
+        console.log('Completing onboarding for user:', user.username);
+        
         const updates: Partial<UserProfile> = {
             ageRange: data.ageRange,
             conditions: data.conditions,
@@ -194,13 +242,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         await updateUserProfileDB(user.username, updates);
-        setUserProfile((prev) => prev ? { ...prev, ...updates } : null);
+        console.log('Profile updated in DynamoDB');
+        
+        setUserProfile((prev) => {
+            const updated = prev ? { ...prev, ...updates } : null;
+            console.log('Updated userProfile state:', updated);
+            return updated;
+        });
     };
 
     // Refresh user profile
     const refreshUserProfile = async () => {
         if (user) {
             await fetchUserProfile(user.username);
+        }
+    };
+
+    // Refresh user from stored tokens
+    const refreshUser = async (): Promise<CognitoAuthUser | null> => {
+        try {
+            console.log('refreshUser called');
+            const idToken = localStorage.getItem('idToken');
+            const accessToken = localStorage.getItem('accessToken');
+            const userEmail = localStorage.getItem('userEmail');
+            
+            console.log('Stored tokens:', { 
+                hasIdToken: !!idToken, 
+                hasAccessToken: !!accessToken,
+                userEmail
+            });
+            
+            if (idToken && accessToken && userEmail) {
+                const authUser: CognitoAuthUser = {
+                    username: userEmail,
+                    email: userEmail,
+                    attributes: { email: userEmail },
+                    session: null as any,
+                };
+                
+                console.log('Setting user from tokens:', authUser);
+                setUser(authUser);
+                await fetchUserProfile(userEmail);
+                
+                return authUser;
+            }
+            console.log('No tokens found');
+            return null;
+        } catch (err) {
+            console.error('Error refreshing user:', err);
+            return null;
         }
     };
 
@@ -218,6 +308,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 resetPassword,
                 completeOnboarding,
                 refreshUserProfile,
+                refreshUser,
                 clearError,
             }}
         >

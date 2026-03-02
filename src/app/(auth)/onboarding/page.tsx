@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/Button';
@@ -21,8 +21,16 @@ export default function OnboardingPage() {
         acceptedMedicalDisclaimer: false,
     });
 
-    const { completeOnboarding } = useAuth();
+    const { completeOnboarding, user, loading: authLoading } = useAuth();
     const router = useRouter();
+
+    // Wait for user to be initialized before allowing onboarding completion
+    useEffect(() => {
+        if (!authLoading && !user) {
+            // If auth is done loading and there's no user, redirect to login
+            router.push('/login');
+        }
+    }, [authLoading, user, router]);
 
     const handleNext = () => {
         if (step < 4) {
@@ -38,11 +46,20 @@ export default function OnboardingPage() {
 
     const handleComplete = async () => {
         if (!data.acceptedTerms || !data.acceptedMedicalDisclaimer) return;
+        
+        // Ensure user is initialized before proceeding
+        if (!user) {
+            console.error('User not initialized');
+            return;
+        }
 
         setLoading(true);
         try {
+            console.log('Completing onboarding for user:', user.username);
             await completeOnboarding(data);
-            router.push('/dashboard');
+            console.log('Onboarding completed, redirecting to dashboard');
+            // Use replace to force a clean navigation
+            router.replace('/dashboard');
         } catch (error) {
             console.error('Error completing onboarding:', error);
         } finally {
@@ -271,7 +288,7 @@ export default function OnboardingPage() {
                             <Button
                                 onClick={handleComplete}
                                 isLoading={loading}
-                                disabled={!data.acceptedTerms || !data.acceptedMedicalDisclaimer}
+                                disabled={!data.acceptedTerms || !data.acceptedMedicalDisclaimer || !user}
                             >
                                 Get Started
                             </Button>

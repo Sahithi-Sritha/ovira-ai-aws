@@ -29,7 +29,7 @@ import {
 import Link from 'next/link';
 
 export default function DashboardPage() {
-    const { user, userProfile } = useAuth();
+    const { user, userProfile, loading: authLoading } = useAuth();
     const [recentLogs, setRecentLogs] = useState<SymptomLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [streak, setStreak] = useState(0);
@@ -53,8 +53,20 @@ export default function DashboardPage() {
         fetchRecentLogs();
     }, [user]);
 
-    // Calculate cycle info
-    const lastPeriodStart = userProfile?.lastPeriodStart?.toDate() || new Date();
+    // Show loading state while auth is loading
+    if (authLoading || loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                    <p className="text-text-secondary">Loading dashboard...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Calculate cycle info - use safe defaults if userProfile is not loaded
+    const lastPeriodStart = userProfile?.lastPeriodStart?.toDate?.() || new Date();
     const cycleLength = userProfile?.averageCycleLength || 28;
     const cycleDay = calculateCycleDay(lastPeriodStart);
     const daysUntilPeriod = getDaysUntilNextPeriod(lastPeriodStart, cycleLength);
