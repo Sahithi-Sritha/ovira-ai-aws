@@ -39,10 +39,39 @@ export default function DashboardPage() {
             if (!user) return;
 
             try {
-                // TODO: Fetch logs from DynamoDB
-                // const logs = await fetchLogsFromDynamoDB(user.uid);
-                setRecentLogs([]);
-                setStreak(0);
+                const response = await fetch(`/api/symptoms?userId=${user.uid}&limit=7`);
+                const data = await response.json();
+
+                if (data.success && data.logs) {
+                    const logs = data.logs.map((log: any) => ({
+                        ...log,
+                        date: {
+                            toDate: () => new Date(log.date),
+                        },
+                    }));
+                    setRecentLogs(logs);
+
+                    // Calculate streak
+                    let currentStreak = 0;
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+
+                    for (let i = 0; i < logs.length; i++) {
+                        const logDate = new Date(logs[i].date.toDate());
+                        logDate.setHours(0, 0, 0, 0);
+
+                        const expectedDate = new Date(today);
+                        expectedDate.setDate(expectedDate.getDate() - i);
+
+                        if (logDate.getTime() === expectedDate.getTime()) {
+                            currentStreak++;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    setStreak(currentStreak);
+                }
             } catch (error) {
                 console.error('Error fetching logs:', error);
             } finally {

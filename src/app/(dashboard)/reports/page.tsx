@@ -40,9 +40,18 @@ export default function ReportsPage() {
             if (!user) return;
 
             try {
-                // TODO: Fetch logs from DynamoDB
-                // const fetchedLogs = await fetchLogsFromDynamoDB(user.uid, 30);
-                setLogs([]);
+                const response = await fetch(`/api/symptoms?userId=${user.uid}&limit=30`);
+                const data = await response.json();
+
+                if (data.success && data.logs) {
+                    const logs = data.logs.map((log: any) => ({
+                        ...log,
+                        date: {
+                            toDate: () => new Date(log.date),
+                        },
+                    }));
+                    setLogs(logs);
+                }
             } catch (error) {
                 console.error('Error fetching logs:', error);
             } finally {

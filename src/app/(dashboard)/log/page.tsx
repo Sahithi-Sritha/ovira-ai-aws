@@ -41,18 +41,27 @@ export default function LogPage() {
         setLoading(true);
 
         try {
-            // TODO: Save log to DynamoDB
-            // await saveToDynamoDB({
-            //     userId: user.uid,
-            //     date: selectedDate.toISOString(),
-            //     flowLevel,
-            //     painLevel,
-            //     mood,
-            //     energyLevel,
-            //     sleepHours,
-            //     symptoms,
-            //     notes: notes.trim() || null,
-            // });
+            const response = await fetch('/api/symptoms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: user.uid,
+                    date: selectedDate.toISOString(),
+                    flowLevel,
+                    painLevel,
+                    mood,
+                    energyLevel,
+                    sleepHours,
+                    symptoms,
+                    notes: notes.trim() || null,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.message || 'Failed to save log');
+            }
 
             setSuccess(true);
             setTimeout(() => {
@@ -60,6 +69,7 @@ export default function LogPage() {
             }, 1500);
         } catch (error) {
             console.error('Error saving log:', error);
+            alert('Failed to save log. Please try again.');
         } finally {
             setLoading(false);
         }
