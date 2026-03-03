@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Mail, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
-export default function VerifyPage() {
+function VerifyContent() {
     const [code, setCode] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -162,5 +162,25 @@ export default function VerifyPage() {
                 </Card>
             </div>
         </div>
+    );
+}
+
+export default function VerifyPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-primary/5 via-background to-accent/5">
+                <Card variant="elevated" padding="lg" className="w-full max-w-md text-center">
+                    <CardContent>
+                        <div className="animate-pulse">
+                            <div className="mx-auto w-14 h-14 rounded-2xl bg-primary/10 mb-4"></div>
+                            <div className="h-6 bg-gray-200 rounded mb-2"></div>
+                            <div className="h-4 bg-gray-200 rounded"></div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        }>
+            <VerifyContent />
+        </Suspense>
     );
 }

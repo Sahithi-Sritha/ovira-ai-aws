@@ -69,7 +69,17 @@ export default function LoginPage() {
             }
         } catch (err: any) {
             console.error('Authentication error:', err);
-            setError(getErrorMessage(err.message || err.error));
+            const errorMsg = getErrorMessage(err.message || err.error);
+            
+            // Special handling for unverified users
+            if (errorMsg === 'UNVERIFIED_USER') {
+                setError('Your email is not verified. Redirecting to verification page...');
+                setTimeout(() => {
+                    router.push(`/verify?email=${encodeURIComponent(email)}`);
+                }, 2000);
+            } else {
+                setError(errorMsg);
+            }
         } finally {
             setLoading(false);
         }
@@ -228,6 +238,9 @@ export default function LoginPage() {
 }
 
 function getErrorMessage(error: string): string {
+    if (error.includes('UserNotConfirmedException') || error.includes('not confirmed')) {
+        return 'UNVERIFIED_USER';
+    }
     if (error.includes('NotAuthorizedException') || error.includes('Incorrect')) {
         return 'Incorrect email or password';
     }

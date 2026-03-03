@@ -15,6 +15,7 @@ import {
     getUserProfile,
     updateUserProfile as updateUserProfileDB,
 } from '@/lib/aws/dynamodb';
+import { reinitializeClients } from '@/lib/aws/config';
 import { UserProfile, OnboardingData } from '@/types';
 
 interface AuthContextType {
@@ -50,30 +51,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Fetch user profile from DynamoDB
     const fetchUserProfile = async (userId: string) => {
         try {
+            console.log('Fetching user profile for:', userId);
             let profile = await getUserProfile(userId);
             
             // If profile doesn't exist, create a basic one
             if (!profile) {
                 console.log('Creating new user profile for:', userId);
-                await createUserProfile({
+                const newProfile: Partial<UserProfile> = {
+                    id: userId,
                     uid: userId,
                     email: userId,
                     displayName: userId.split('@')[0],
                     onboardingComplete: false,
                     createdAt: new Date().toISOString(),
-                });
+                    averageCycleLength: 28,
+                    conditions: [],
+                    language: 'en',
+                    ageRange: '25-34' as const,
+                };
                 
-                // Fetch the newly created profile
-                profile = await getUserProfile(userId);
+                try {
+                    await createUserProfile(newProfile);
+                    console.log('New user profile created successfully');
+                    
+                    // Fetch the newly created profile
+                    profile = await getUserProfile(userId);
+                } catch (createError) {
+                    console.error('Failed to create user profile:', createError);
+                    // Set a basic profile in state even if creation fails
+                    profile = newProfile as UserProfile;
+                }
             }
             
+            console.log('Setting user profile:', profile);
             setUserProfile(profile);
         } catch (err: any) {
             console.error('Error fetching user profile:', err);
-            if (!err.message?.includes('offline')) {
+            
+            // Don't show error for offline scenarios
+            if (!err.message?.includes('offline') && !err.message?.includes('NetworkingError')) {
                 setError('Unable to load profile. Please check your connection.');
             }
-            setUserProfile(null);
+            
+            // Set a minimal profile to prevent auth loops
+            const fallbackProfile: UserProfile = {
+                id: userId,
+                uid: userId,
+                email: userId,
+                displayName: userId.split('@')[0],
+                onboardingComplete: false,
+                createdAt: new Date().toISOString(),
+                averageCycleLength: 28,
+                conditions: [],
+                language: 'en',
+                ageRange: '25-34',
+            };
+            
+            setUserProfile(fallbackProfile);
         }
     };
 
@@ -109,6 +143,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     
                     console.log('Setting user from stored tokens:', authUser);
                     setUser(authUser);
+                    // Reinitialize AWS clients with new credentials
+                    reinitializeClients();
                     await fetchUserProfile(userEmail);
                 } else {
                     console.log('No stored auth data, user is null');
@@ -188,6 +224,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             };
 
             setUser(authUser);
+            // Reinitialize AWS clients with new credentials
+            reinitializeClients();
             await fetchUserProfile(email);
             
             // Return the user object so caller can verify state is set
@@ -282,6 +320,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 
                 console.log('Setting user from tokens:', authUser);
                 setUser(authUser);
+                // Reinitialize AWS clients with new credentials
+                reinitializeClients();
                 await fetchUserProfile(userEmail);
                 
                 return authUser;

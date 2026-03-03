@@ -67,12 +67,12 @@ export default function SignupPage() {
             console.error('Signup error:', err);
             const errorMessage = err.message || err.error || '';
             
-            // If user already exists, show helpful message with login link
+            // If user already exists, check if they need verification
             if (errorMessage.includes('UsernameExistsException') || errorMessage.includes('already exists')) {
-                setError('An account with this email already exists. Please sign in instead.');
-                // Redirect to login after 2 seconds
+                setError('Account exists. Redirecting to verification page...');
+                // Redirect to verify page - they might just need to verify
                 setTimeout(() => {
-                    router.push('/login');
+                    router.push(`/verify?email=${encodeURIComponent(email)}`);
                 }, 2000);
             } else {
                 setError(getAmplifyErrorMessage(errorMessage));

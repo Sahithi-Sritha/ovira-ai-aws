@@ -1,5 +1,6 @@
 // User Profile
 export interface UserProfile {
+    id?: string; // Optional for backward compatibility
     uid: string;
     email: string;
     displayName?: string;

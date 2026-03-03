@@ -9,10 +9,6 @@ import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 // AWS Configuration
 export const awsConfig = {
     region: process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1',
-    credentials: {
-        accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_ACCESS_KEY || '',
-    },
 };
 
 // Cognito Configuration
@@ -44,6 +40,20 @@ export const bedrockConfig = {
     region: process.env.BEDROCK_REGION || 'us-east-1',
 };
 
+// Function to get credentials
+function getCredentials() {
+    const accessKeyId = process.env.NEXT_PUBLIC_AWS_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.NEXT_PUBLIC_AWS_SECRET_ACCESS_KEY;
+    
+    if (accessKeyId && secretAccessKey) {
+        return {
+            accessKeyId,
+            secretAccessKey,
+        };
+    }
+    return undefined;
+}
+
 // Initialize AWS Clients (client-side only)
 let cognitoClient: CognitoIdentityProviderClient | undefined;
 let dynamoDBClient: DynamoDBClient | undefined;
@@ -51,15 +61,24 @@ let docClient: DynamoDBDocumentClient | undefined;
 let s3Client: S3Client | undefined;
 let bedrockClient: BedrockRuntimeClient | undefined;
 
-if (typeof window !== 'undefined') {
+function initializeClients() {
+    if (typeof window === 'undefined') return;
+
     try {
-        // Initialize Cognito Client
+        const credentials = getCredentials();
+        
+        // Initialize Cognito Client (doesn't need user credentials)
         cognitoClient = new CognitoIdentityProviderClient({
             region: cognitoConfig.region,
         });
 
-        // Initialize DynamoDB Client
-        dynamoDBClient = new DynamoDBClient(awsConfig);
+        // Initialize DynamoDB Client with credentials
+        const clientConfig = {
+            region: awsConfig.region,
+            ...(credentials && { credentials }),
+        };
+
+        dynamoDBClient = new DynamoDBClient(clientConfig);
         docClient = DynamoDBDocumentClient.from(dynamoDBClient, {
             marshallOptions: {
                 removeUndefinedValues: true,
@@ -68,11 +87,12 @@ if (typeof window !== 'undefined') {
         });
 
         // Initialize S3 Client
-        s3Client = new S3Client(awsConfig);
+        s3Client = new S3Client(clientConfig);
 
-        // Initialize Bedrock Client (for client-side if needed)
+        // Initialize Bedrock Client
         bedrockClient = new BedrockRuntimeClient({
             region: bedrockConfig.region,
+            ...(credentials && { credentials }),
         });
 
         console.log('AWS clients initialized successfully');
@@ -81,32 +101,57 @@ if (typeof window !== 'undefined') {
     }
 }
 
+// Initialize on first load
+if (typeof window !== 'undefined') {
+    initializeClients();
+}
+
+// Re-initialize clients when auth state changes
+export function reinitializeClients() {
+    initializeClients();
+}
+
 // Export clients
 export { cognitoClient, dynamoDBClient, docClient, s3Client, bedrockClient };
 
 // Type-safe getters
 export function getCognitoClient(): CognitoIdentityProviderClient {
-    if (!cognitoClient) throw new Error('Cognito client not initialized. Are you running on the server?');
+    if (!cognitoClient) {
+        initializeClients();
+        if (!cognitoClient) throw new Error('Cognito client not initialized');
+    }
     return cognitoClient;
 }
 
 export function getDynamoDBClient(): DynamoDBClient {
-    if (!dynamoDBClient) throw new Error('DynamoDB client not initialized. Are you running on the server?');
+    if (!dynamoDBClient) {
+        initializeClients();
+        if (!dynamoDBClient) throw new Error('DynamoDB client not initialized');
+    }
     return dynamoDBClient;
 }
 
 export function getDocClient(): DynamoDBDocumentClient {
-    if (!docClient) throw new Error('DynamoDB Document client not initialized. Are you running on the server?');
+    if (!docClient) {
+        initializeClients();
+        if (!docClient) throw new Error('DynamoDB Document client not initialized');
+    }
     return docClient;
 }
 
 export function getS3Client(): S3Client {
-    if (!s3Client) throw new Error('S3 client not initialized. Are you running on the server?');
+    if (!s3Client) {
+        initializeClients();
+        if (!s3Client) throw new Error('S3 client not initialized');
+    }
     return s3Client;
 }
 
 export function getBedrockClient(): BedrockRuntimeClient {
-    if (!bedrockClient) throw new Error('Bedrock client not initialized. Are you running on the server?');
+    if (!bedrockClient) {
+        initializeClients();
+        if (!bedrockClient) throw new Error('Bedrock client not initialized');
+    }
     return bedrockClient;
 }
 

@@ -1,16 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { MOOD_OPTIONS, FLOW_LEVELS, ENERGY_LEVELS, SYMPTOM_OPTIONS } from '@/types';
+import dynamic from 'next/dynamic';
 // TODO: Replace with AWS DynamoDB operations
 import { format } from 'date-fns';
 import { Calendar, Check, ArrowLeft, Save, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
+
+// Lazy load the calendar modal
+const CalendarModal = dynamic(() => import('@/components/calendar/CalendarModal'), {
+  ssr: false,
+});
 
 export default function LogPage() {
     const { user } = useAuth();
@@ -18,6 +24,8 @@ export default function LogPage() {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const [isLoadingExistingLog, setIsLoadingExistingLog] = useState(false);
 
     // Form state
     const [flowLevel, setFlowLevel] = useState<'none' | 'light' | 'medium' | 'heavy'>('none');
@@ -27,6 +35,60 @@ export default function LogPage() {
     const [sleepHours, setSleepHours] = useState(7);
     const [symptoms, setSymptoms] = useState<string[]>([]);
     const [notes, setNotes] = useState('');
+
+    // Load existing log data when date changes
+    const loadExistingLog = async (date: Date) => {
+        if (!user) return;
+        
+        setIsLoadingExistingLog(true);
+        try {
+            const response = await fetch(`/api/symptoms?userId=${encodeURIComponent(user.username)}&limit=100`);
+            const data = await response.json();
+            
+            if (data.success && data.logs) {
+                // Find log for the selected date
+                const dateStr = date.toISOString().split('T')[0];
+                const existingLog = data.logs.find((log: any) => {
+                    const logDateStr = new Date(log.date).toISOString().split('T')[0];
+                    return logDateStr === dateStr;
+                });
+                
+                if (existingLog) {
+                    console.log('Found existing log for date:', dateStr, existingLog);
+                    // Load the existing data into the form
+                    setFlowLevel(existingLog.flowLevel || 'none');
+                    setPainLevel(existingLog.painLevel || 0);
+                    setMood(existingLog.mood || 'neutral');
+                    setEnergyLevel(existingLog.energyLevel || 'medium');
+                    setSleepHours(existingLog.sleepHours || 7);
+                    setSymptoms(existingLog.symptoms || []);
+                    setNotes(existingLog.notes || '');
+                } else {
+                    console.log('No existing log found for date:', dateStr);
+                    // Reset to defaults if no log exists
+                    setFlowLevel('none');
+                    setPainLevel(0);
+                    setMood('neutral');
+                    setEnergyLevel('medium');
+                    setSleepHours(7);
+                    setSymptoms([]);
+                    setNotes('');
+                }
+            }
+        } catch (error) {
+            console.error('Error loading existing log:', error);
+        } finally {
+            setIsLoadingExistingLog(false);
+        }
+    };
+
+    // Load existing log when component mounts or date changes
+    useEffect(() => {
+        if (user) {
+            loadExistingLog(selectedDate);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user]); // Only run on mount and when user changes
 
     const toggleSymptom = (symptom: string) => {
         setSymptoms((prev) =>
@@ -65,6 +127,17 @@ export default function LogPage() {
             }
 
             setSuccess(true);
+            
+            // Clear calendar cache so it refetches fresh data
+            try {
+                const { getCalendarCache } = await import('@/lib/utils/calendar-cache');
+                const cache = getCalendarCache();
+                cache.clear();
+                console.log('Calendar cache cleared after saving log');
+            } catch (cacheError) {
+                console.log('Could not clear cache:', cacheError);
+            }
+            
             setTimeout(() => {
                 router.push('/dashboard');
             }, 1500);
@@ -81,7 +154,14 @@ export default function LogPage() {
         newDate.setDate(newDate.getDate() + days);
         if (newDate <= new Date()) {
             setSelectedDate(newDate);
+            loadExistingLog(newDate);
         }
+    };
+
+    const handleDateSelect = (date: Date) => {
+        setSelectedDate(date);
+        setIsCalendarOpen(false);
+        loadExistingLog(date);
     };
 
     if (success) {
@@ -116,6 +196,15 @@ export default function LogPage() {
                 </div>
             </div>
 
+            {isLoadingExistingLog && (
+                <Card variant="elevated" className="mb-6">
+                    <CardContent className="py-8 text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                        <p className="text-text-secondary">Loading existing log...</p>
+                    </CardContent>
+                </Card>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Date Selector */}
                 <Card variant="elevated">
@@ -128,12 +217,16 @@ export default function LogPage() {
                             >
                                 <ChevronLeft size={24} />
                             </button>
-                            <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setIsCalendarOpen(true)}
+                                className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-surface-elevated transition-colors"
+                            >
                                 <Calendar className="text-primary" size={20} />
                                 <span className="text-lg font-medium">
                                     {format(selectedDate, 'EEEE, MMMM d, yyyy')}
                                 </span>
-                            </div>
+                            </button>
                             <button
                                 type="button"
                                 onClick={() => changeDate(1)}
@@ -342,6 +435,17 @@ export default function LogPage() {
                     Save Log
                 </Button>
             </form>
+
+            {/* Calendar Modal */}
+            {user && (
+                <CalendarModal
+                    isOpen={isCalendarOpen}
+                    onClose={() => setIsCalendarOpen(false)}
+                    selectedDate={selectedDate}
+                    onDateSelect={handleDateSelect}
+                    userId={user.username}
+                />
+            )}
         </div>
     );
 }
