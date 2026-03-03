@@ -40,7 +40,7 @@ export default function ReportsPage() {
             if (!user) return;
 
             try {
-                const response = await fetch(`/api/symptoms?userId=${user.uid}&limit=30`);
+                const response = await fetch(`/api/symptoms?userId=${user.username}&limit=30`);
                 const data = await response.json();
 
                 if (data.success && data.logs) {

@@ -100,7 +100,7 @@ export default function HealthReportPage() {
             if (!user) return;
 
             try {
-                const response = await fetch(`/api/symptoms?userId=${user.uid}&limit=90`);
+                const response = await fetch(`/api/symptoms?userId=${user.username}&limit=90`);
                 const data = await response.json();
 
                 if (data.success && data.logs) {

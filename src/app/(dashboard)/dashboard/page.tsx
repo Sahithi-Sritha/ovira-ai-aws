@@ -39,7 +39,7 @@ export default function DashboardPage() {
             if (!user) return;
 
             try {
-                const response = await fetch(`/api/symptoms?userId=${user.uid}&limit=7`);
+                const response = await fetch(`/api/symptoms?userId=${user.username}&limit=7`);
                 const data = await response.json();
 
                 if (data.success && data.logs) {

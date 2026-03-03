@@ -45,7 +45,7 @@ export default function LogPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    userId: user.uid,
+                    userId: user.username, // Use username as userId
                     date: selectedDate.toISOString(),
                     flowLevel,
                     painLevel,
@@ -60,16 +60,17 @@ export default function LogPage() {
             const data = await response.json();
 
             if (!data.success) {
-                throw new Error(data.message || 'Failed to save log');
+                console.error('API Error:', data);
+                throw new Error(data.message || data.error || 'Failed to save log');
             }
 
             setSuccess(true);
             setTimeout(() => {
                 router.push('/dashboard');
             }, 1500);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving log:', error);
-            alert('Failed to save log. Please try again.');
+            alert(`Failed to save log: ${error.message || 'Please try again.'}`);
         } finally {
             setLoading(false);
         }

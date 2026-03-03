@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const client = new DynamoDBClient({
   region: process.env.NEXT_PUBLIC_AWS_REGION!,
@@ -24,15 +24,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create unique ID for the log
+    // Create unique ID for the log using timestamp
     const timestamp = new Date(date).getTime();
-    const logId = `${userId}#${timestamp}`;
+    const id = `${userId}#${timestamp}`;
 
     const command = new PutCommand({
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_SYMPTOMS_TABLE!,
       Item: {
+        id, // Primary key
         userId,
-        logId,
         timestamp,
         date: new Date(date).toISOString(),
         flowLevel,
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      logId,
+      id,
     });
   } catch (error: any) {
     console.error('Error saving symptom log:', error);
@@ -78,21 +78,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const command = new QueryCommand({
+    // Use Scan with filter since we're using simple id key
+    const command = new ScanCommand({
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_SYMPTOMS_TABLE!,
-      KeyConditionExpression: 'userId = :userId',
+      FilterExpression: 'userId = :userId',
       ExpressionAttributeValues: {
         ':userId': userId,
       },
-      ScanIndexForward: false, // Sort descending (newest first)
       Limit: limit,
     });
 
     const response = await docClient.send(command);
 
+    // Sort by timestamp descending (newest first)
+    const sortedLogs = (response.Items || []).sort((a: any, b: any) => b.timestamp - a.timestamp);
+
     return NextResponse.json({
       success: true,
-      logs: response.Items || [],
+      logs: sortedLogs,
     });
   } catch (error: any) {
     console.error('Error fetching symptom logs:', error);
