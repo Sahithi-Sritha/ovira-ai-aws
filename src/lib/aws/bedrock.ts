@@ -4,7 +4,7 @@ import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedroc
 // These env vars are NOT accessible in 'use client' modules like config.ts.
 const bedrockConfig = {
     modelId: process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-haiku-20240307-v1:0',
-    fallbackModelId: process.env.BEDROCK_FALLBACK_MODEL_ID || 'amazon.titan-text-express-v1',
+    fallbackModelId: process.env.BEDROCK_FALLBACK_MODEL_ID || 'amazon.nova-micro-v1:0',
     region: process.env.BEDROCK_REGION || 'us-east-1',
 };
 
@@ -107,14 +107,19 @@ export async function invokeClaude(
     }
 }
 
-// Invoke Titan model as fallback
+// Invoke Nova Micro model as fallback
 export async function invokeTitan(prompt: string): Promise<string> {
     const client = getBedrockClient();
 
     const requestBody = {
-        inputText: prompt,
-        textGenerationConfig: {
-            maxTokenCount: 1024,
+        messages: [
+            {
+                role: 'user',
+                content: [{ text: prompt }],
+            },
+        ],
+        inferenceConfig: {
+            maxTokens: 1024,
             temperature: 0.7,
             topP: 0.9,
         },
@@ -131,7 +136,7 @@ export async function invokeTitan(prompt: string): Promise<string> {
         const response = await client.send(command);
         const responseBody = JSON.parse(new TextDecoder().decode(response.body));
 
-        const text = responseBody.results?.[0]?.outputText || '';
+        const text = responseBody.output?.message?.content?.[0]?.text || '';
 
         // Apply medical safety guardrails
         if (containsProhibitedTerms(text)) {
