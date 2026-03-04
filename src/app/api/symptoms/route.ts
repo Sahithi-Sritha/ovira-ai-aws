@@ -24,17 +24,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create unique ID for the log using timestamp
-    const timestamp = new Date(date).getTime();
-    const id = `${userId}#${timestamp}`;
+    // Normalize date to YYYY-MM-DD to ensure one record per user per date
+    const dateObj = new Date(date);
+    const normalizedDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+    const id = `${userId}#${normalizedDate}`;
 
     const command = new PutCommand({
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_SYMPTOMS_TABLE!,
       Item: {
-        id, // Primary key
+        id, // Primary key — deterministic per user+date for upsert
         userId,
-        timestamp,
-        date: new Date(date).toISOString(),
+        timestamp: dateObj.getTime(),
+        date: normalizedDate,
         flowLevel,
         painLevel,
         mood,
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
         symptoms: symptoms || [],
         notes: notes || null,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       },
     });
 
