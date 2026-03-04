@@ -39,14 +39,22 @@ export default function DashboardPage() {
             if (!user) return;
 
             try {
-                const response = await fetch(`/api/symptoms?userId=${user.username}&limit=7`);
+                const response = await fetch(`/api/symptoms?userId=${user.username}&limit=30`);
                 const data = await response.json();
 
                 if (data.success && data.logs) {
                     const logs = data.logs.map((log: any) => ({
                         ...log,
                         date: {
-                            toDate: () => new Date(log.date),
+                            // Handle both YYYY-MM-DD and ISO formats correctly in local time
+                            toDate: () => {
+                                if (log.date.includes('T')) {
+                                    return new Date(log.date);
+                                }
+                                // YYYY-MM-DD: parse as local date, not UTC
+                                const [y, m, d] = log.date.split('-').map(Number);
+                                return new Date(y, m - 1, d);
+                            },
                         },
                     }));
                     setRecentLogs(logs);
