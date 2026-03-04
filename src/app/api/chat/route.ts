@@ -47,13 +47,18 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // Build user context string
+        // Build user context string from health summary and profile data
         let contextString = '';
-        if (userContext?.ageRange) {
-            contextString += `User age range: ${userContext.ageRange}`;
-        }
-        if (userContext?.conditions?.length > 0) {
-            contextString += `, Known conditions: ${userContext.conditions.join(', ')}`;
+        if (userContext?.healthSummary) {
+            contextString = userContext.healthSummary;
+        } else {
+            // Fallback to basic context
+            if (userContext?.ageRange) {
+                contextString += `User age range: ${userContext.ageRange}`;
+            }
+            if (userContext?.conditions?.length > 0) {
+                contextString += `, Known conditions: ${userContext.conditions.join(', ')}`;
+            }
         }
 
         // Build conversation history for Bedrock
@@ -70,7 +75,7 @@ export async function POST(request: NextRequest) {
         try {
             // Call Bedrock AI
             const aiResponse = await chatWithAI(message, conversationHistory, contextString);
-            
+
             return NextResponse.json({ message: aiResponse });
         } catch (aiError) {
             console.error('Bedrock AI error:', aiError);

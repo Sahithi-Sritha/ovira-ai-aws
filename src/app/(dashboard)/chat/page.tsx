@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Send, ArrowLeft, Sparkles, AlertCircle, User, Bot } from 'lucide-react';
 import Link from 'next/link';
+import { getCurrentCycleInfo } from '@/lib/utils/cycle-analysis';
+import { formatDate } from '@/lib/utils';
 
 interface Message {
     id: string;
@@ -26,6 +28,7 @@ export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [healthSummary, setHealthSummary] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -35,6 +38,86 @@ export default function ChatPage() {
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // Fetch user's health data and build a summary for the AI
+    useEffect(() => {
+        const buildHealthSummary = async () => {
+            if (!user) return;
+
+            try {
+                const response = await fetch(`/api/symptoms?userId=${user.username}&limit=100`);
+                const data = await response.json();
+
+                if (!data.success || !data.logs) return;
+
+                const logs = data.logs as Array<{ date: string; flowLevel: string; painLevel: number; mood: string; energyLevel: string; symptoms: string[]; notes?: string;[key: string]: any }>;
+
+                // Parse profile lastPeriodStart safely
+                let profileLastPeriod: Date | null = null;
+                if (userProfile?.lastPeriodStart) {
+                    const lps = userProfile.lastPeriodStart as any;
+                    if (typeof lps === 'string') profileLastPeriod = new Date(lps);
+                    else if (lps?.toDate) profileLastPeriod = lps.toDate();
+                }
+
+                // Get cycle analysis
+                const cycleInfo = getCurrentCycleInfo(logs, profileLastPeriod, userProfile?.averageCycleLength);
+
+                // Build summary of recent logs (last 7)
+                const recentLogs = logs.slice(0, 7);
+                const recentSymptoms: string[] = [];
+                let totalPain = 0;
+                let painCount = 0;
+                const moods: string[] = [];
+                const flowLevels: string[] = [];
+
+                for (const log of recentLogs) {
+                    if (log.symptoms?.length) recentSymptoms.push(...log.symptoms);
+                    if (log.painLevel != null) { totalPain += log.painLevel; painCount++; }
+                    if (log.mood) moods.push(log.mood);
+                    if (log.flowLevel && log.flowLevel !== 'none') flowLevels.push(log.flowLevel);
+                }
+
+                const avgPain = painCount > 0 ? (totalPain / painCount).toFixed(1) : 'N/A';
+                const uniqueSymptoms = [...new Set(recentSymptoms)];
+                const moodSummary = moods.length > 0 ? moods.slice(0, 3).join(', ') : 'not tracked';
+
+                // Predicted next period date
+                const nextPeriodFormatted = formatDate(cycleInfo.nextPeriodDate, 'MMMM d, yyyy');
+
+                // Build the summary string
+                let summary = `USER HEALTH PROFILE:\n`;
+                summary += `- Name: ${userProfile?.displayName || 'Unknown'}\n`;
+                summary += `- Age range: ${userProfile?.ageRange || 'Unknown'}\n`;
+                if (userProfile?.conditions?.length) {
+                    summary += `- Known conditions: ${userProfile.conditions.join(', ')}\n`;
+                }
+                summary += `\nCYCLE STATUS:\n`;
+                summary += `- Current cycle day: Day ${cycleInfo.cycleDay} of ${cycleInfo.averageCycleLength}\n`;
+                summary += `- Current phase: ${cycleInfo.currentPhase}\n`;
+                summary += `- Average cycle length: ${cycleInfo.averageCycleLength} days${cycleInfo.hasSufficientData ? ' (computed from logs)' : ' (default)'}\n`;
+                summary += `- Days until next period: ${cycleInfo.daysUntilNextPeriod}\n`;
+                summary += `- Next period expected: ${nextPeriodFormatted}\n`;
+                summary += `- Periods detected from logs: ${cycleInfo.periodStartDates.length}\n`;
+                summary += `\nRECENT HEALTH DATA (last 7 logs):\n`;
+                summary += `- Average pain level: ${avgPain}/10\n`;
+                summary += `- Recent moods: ${moodSummary}\n`;
+                if (uniqueSymptoms.length > 0) {
+                    summary += `- Recent symptoms: ${uniqueSymptoms.join(', ')}\n`;
+                }
+                if (flowLevels.length > 0) {
+                    summary += `- Recent flow levels: ${flowLevels.join(', ')}\n`;
+                }
+                summary += `- Total logs recorded: ${logs.length}\n`;
+
+                setHealthSummary(summary);
+            } catch (error) {
+                console.error('Error building health summary for AI:', error);
+            }
+        };
+
+        buildHealthSummary();
+    }, [user, userProfile]);
 
     const sendMessage = async (content: string) => {
         if (!content.trim() || loading) return;
@@ -56,10 +139,11 @@ export default function ChatPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: content,
-                    history: messages.slice(-10), // Last 10 messages for context
+                    history: messages.slice(-10),
                     userContext: {
                         ageRange: userProfile?.ageRange,
                         conditions: userProfile?.conditions,
+                        healthSummary: healthSummary,
                     },
                 }),
             });
@@ -159,8 +243,8 @@ export default function ChatPage() {
                                     )}
                                     <div
                                         className={`max-w-[80%] p-4 rounded-2xl ${message.role === 'user'
-                                                ? 'bg-primary text-white rounded-tr-sm'
-                                                : 'bg-surface-elevated text-text-primary rounded-tl-sm'
+                                            ? 'bg-primary text-white rounded-tr-sm'
+                                            : 'bg-surface-elevated text-text-primary rounded-tl-sm'
                                             }`}
                                     >
                                         <p className="text-sm whitespace-pre-wrap">{message.content}</p>
