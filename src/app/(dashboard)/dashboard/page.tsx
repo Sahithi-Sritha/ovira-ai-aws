@@ -4,16 +4,12 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-// TODO: Replace with AWS DynamoDB queries
 import { SymptomLog } from '@/types';
 import {
-    calculateCycleDay,
-    getDaysUntilNextPeriod,
-    getCyclePhase,
     getPhaseColor,
     formatDate,
-    getOrdinalSuffix
 } from '@/lib/utils';
+import { getCurrentCycleInfo, calculateLoggingStreak, CycleInfo } from '@/lib/utils/cycle-analysis';
 import {
     Calendar,
     MessageCircle,
@@ -33,13 +29,14 @@ export default function DashboardPage() {
     const [recentLogs, setRecentLogs] = useState<SymptomLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [streak, setStreak] = useState(0);
+    const [cycleInfo, setCycleInfo] = useState<CycleInfo | null>(null);
 
     useEffect(() => {
         const fetchRecentLogs = async () => {
             if (!user) return;
 
             try {
-                const response = await fetch(`/api/symptoms?userId=${user.username}&limit=30`);
+                const response = await fetch(`/api/symptoms?userId=${user.username}&limit=100`);
                 const data = await response.json();
 
                 if (data.success && data.logs) {
@@ -51,7 +48,6 @@ export default function DashboardPage() {
                                 if (log.date.includes('T')) {
                                     return new Date(log.date);
                                 }
-                                // YYYY-MM-DD: parse as local date, not UTC
                                 const [y, m, d] = log.date.split('-').map(Number);
                                 return new Date(y, m - 1, d);
                             },
@@ -59,26 +55,29 @@ export default function DashboardPage() {
                     }));
                     setRecentLogs(logs);
 
-                    // Calculate streak
-                    let currentStreak = 0;
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
+                    // Smart cycle analysis from actual log data
+                    const rawLogs = data.logs as Array<{ date: string; flowLevel: string;[key: string]: any }>;
 
-                    for (let i = 0; i < logs.length; i++) {
-                        const logDate = new Date(logs[i].date.toDate());
-                        logDate.setHours(0, 0, 0, 0);
-
-                        const expectedDate = new Date(today);
-                        expectedDate.setDate(expectedDate.getDate() - i);
-
-                        if (logDate.getTime() === expectedDate.getTime()) {
-                            currentStreak++;
-                        } else {
-                            break;
+                    // Parse profile lastPeriodStart safely
+                    let profileLastPeriod: Date | null = null;
+                    if (userProfile?.lastPeriodStart) {
+                        const lps = userProfile.lastPeriodStart as any;
+                        if (typeof lps === 'string') {
+                            profileLastPeriod = new Date(lps);
+                        } else if (lps?.toDate) {
+                            profileLastPeriod = lps.toDate();
                         }
                     }
 
-                    setStreak(currentStreak);
+                    const info = getCurrentCycleInfo(
+                        rawLogs,
+                        profileLastPeriod,
+                        userProfile?.averageCycleLength
+                    );
+                    setCycleInfo(info);
+
+                    // Smart streak calculation
+                    setStreak(calculateLoggingStreak(rawLogs));
                 }
             } catch (error) {
                 console.error('Error fetching logs:', error);
@@ -88,7 +87,7 @@ export default function DashboardPage() {
         };
 
         fetchRecentLogs();
-    }, [user]);
+    }, [user, userProfile]);
 
     // Show loading state while auth is loading
     if (authLoading || loading) {
@@ -102,16 +101,21 @@ export default function DashboardPage() {
         );
     }
 
-    // Calculate cycle info - use safe defaults if userProfile is not loaded
-    const lastPeriodStart = userProfile?.lastPeriodStart?.toDate?.() || new Date();
-    const cycleLength = userProfile?.averageCycleLength || 28;
-    const cycleDay = calculateCycleDay(lastPeriodStart);
-    const daysUntilPeriod = getDaysUntilNextPeriod(lastPeriodStart, cycleLength);
-    const currentPhase = getCyclePhase(cycleDay, cycleLength);
+    // Use smart cycle info or fallback defaults
+    const avgCycleLength = cycleInfo?.averageCycleLength || 28;
+    const daysUntilPeriod = cycleInfo?.daysUntilNextPeriod ?? 28;
+    const currentPhase = cycleInfo?.currentPhase || 'Follicular';
+    const cycleDay = cycleInfo?.cycleDay || 1;
+    const hasSufficientData = cycleInfo?.hasSufficientData || false;
     const phaseColor = getPhaseColor(currentPhase);
 
     // Get latest log
     const latestLog = recentLogs[0];
+
+    // Format predicted period date
+    const nextPeriodDate = new Date();
+    nextPeriodDate.setDate(nextPeriodDate.getDate() + daysUntilPeriod);
+    const nextPeriodFormatted = formatDate(nextPeriodDate, 'MMMM d');
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
@@ -134,18 +138,35 @@ export default function DashboardPage() {
 
             {/* Main Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Cycle Day Card */}
+                {/* Period Countdown Card — Primary */}
                 <Card variant="gradient" className="md:col-span-2 lg:col-span-1">
                     <CardContent className="pt-6">
                         <div className="flex items-start justify-between">
                             <div>
-                                <p className="text-sm text-text-secondary mb-1">Current Cycle Day</p>
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-5xl font-bold" style={{ color: phaseColor }}>
-                                        {cycleDay}
-                                    </span>
-                                    <span className="text-text-muted">of {cycleLength}</span>
-                                </div>
+                                <p className="text-sm text-text-secondary mb-1">Next Period</p>
+                                {daysUntilPeriod > 0 ? (
+                                    <>
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="text-5xl font-bold" style={{ color: phaseColor }}>
+                                                {daysUntilPeriod}
+                                            </span>
+                                            <span className="text-text-muted text-lg">days away</span>
+                                        </div>
+                                        <p className="text-sm text-text-secondary mt-1">
+                                            Expected {nextPeriodFormatted}
+                                        </p>
+                                    </>
+                                ) : daysUntilPeriod === 0 ? (
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-3xl font-bold text-accent">Expected Today</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-3xl font-bold text-error">
+                                            {Math.abs(daysUntilPeriod)} days late
+                                        </span>
+                                    </div>
+                                )}
                                 <div
                                     className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full text-sm font-medium"
                                     style={{ backgroundColor: `${phaseColor}20`, color: phaseColor }}
@@ -172,7 +193,7 @@ export default function DashboardPage() {
                                         fill="none"
                                         stroke={phaseColor}
                                         strokeWidth="3"
-                                        strokeDasharray={`${(cycleDay / cycleLength) * 100}, 100`}
+                                        strokeDasharray={`${(cycleDay / avgCycleLength) * 100}, 100`}
                                         strokeLinecap="round"
                                     />
                                 </svg>
@@ -181,7 +202,7 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* Period Prediction Card */}
+                {/* Cycle Info Card */}
                 <Card variant="elevated">
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-3 mb-4">
@@ -189,23 +210,25 @@ export default function DashboardPage() {
                                 <Heart className="w-5 h-5 text-accent" />
                             </div>
                             <div>
-                                <p className="text-sm text-text-secondary">Next Period</p>
+                                <p className="text-sm text-text-secondary">Cycle Length</p>
                                 <p className="font-semibold">
-                                    {daysUntilPeriod > 0
-                                        ? `In ${daysUntilPeriod} days`
-                                        : daysUntilPeriod === 0
-                                            ? 'Expected today'
-                                            : `${Math.abs(daysUntilPeriod)} days late`
-                                    }
+                                    {avgCycleLength} days {hasSufficientData ? '(computed)' : '(default)'}
                                 </p>
                             </div>
                         </div>
                         <div className="h-2 bg-surface-elevated rounded-full overflow-hidden">
                             <div
                                 className="h-full bg-gradient-to-r from-primary to-accent transition-all"
-                                style={{ width: `${Math.min(100, ((cycleLength - daysUntilPeriod) / cycleLength) * 100)}%` }}
+                                style={{ width: `${Math.min(100, (cycleDay / avgCycleLength) * 100)}%` }}
                             />
                         </div>
+                        <p className="text-xs text-text-muted mt-2">Day {cycleDay} of {avgCycleLength}</p>
+                        {!hasSufficientData && (
+                            <p className="text-xs text-warning mt-2 flex items-center gap-1">
+                                <AlertCircle size={12} />
+                                Log more periods for smarter predictions
+                            </p>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -286,6 +309,7 @@ export default function DashboardPage() {
                                     {currentPhase === 'Follicular' && ' Energy levels typically increase during this time.'}
                                     {currentPhase === 'Ovulation' && ' You may notice increased energy and mood.'}
                                     {currentPhase === 'Menstrual' && ' Remember to stay hydrated and rest when needed.'}
+                                    {currentPhase === 'Expected Period' && ' Your period may arrive soon. Take care of yourself.'}
                                 </p>
                             </div>
                         </div>
