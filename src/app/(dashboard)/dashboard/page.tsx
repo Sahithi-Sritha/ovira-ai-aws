@@ -112,9 +112,8 @@ export default function DashboardPage() {
     // Get latest log
     const latestLog = recentLogs[0];
 
-    // Format predicted period date
-    const nextPeriodDate = new Date();
-    nextPeriodDate.setDate(nextPeriodDate.getDate() + daysUntilPeriod);
+    // Format predicted period date from cycle analysis
+    const nextPeriodDate = cycleInfo?.nextPeriodDate || new Date();
     const nextPeriodFormatted = formatDate(nextPeriodDate, 'MMMM d');
 
     return (

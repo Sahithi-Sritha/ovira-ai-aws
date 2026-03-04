@@ -1,8 +1,9 @@
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, addDays } from 'date-fns';
 
 export interface CycleInfo {
     averageCycleLength: number;
     lastPeriodStart: Date;
+    nextPeriodDate: Date;
     cycleDay: number;
     daysUntilNextPeriod: number;
     currentPhase: string;
@@ -36,79 +37,79 @@ function toDateKey(date: Date): string {
 
 /**
  * Detect period start dates from symptom logs.
- * A period start = a day with flow (light/medium/heavy) preceded by a day with no flow or no log.
+ * 
+ * Logic:
+ * 1. Sort all logs by date ascending
+ * 2. Build a map of date → flowLevel for quick lookups
+ * 3. Walk through dates: a "period start" is a flow day where the previous
+ *    calendar day either has no log or has flowLevel === 'none'
+ * 4. Adjacent flow days within 7 days are part of the same period
+ * 5. Flow days separated by 14+ days from the last flow day = new period
  */
 export function detectPeriodStartDates(logs: LogEntry[]): Date[] {
     if (!logs || logs.length === 0) return [];
 
-    // Sort logs by date ascending
-    const sorted = [...logs].sort((a, b) => {
-        return parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime();
-    });
+    // Build date → flowLevel map
+    const flowMap = new Map<string, string>();
+    for (const log of logs) {
+        const key = toDateKey(parseLocalDate(log.date));
+        flowMap.set(key, log.flowLevel || 'none');
+    }
+
+    // Sort logs by date ascending, deduplicate by date
+    const sortedDates = [...new Set(logs.map(l => toDateKey(parseLocalDate(l.date))))].sort();
 
     const periodStarts: Date[] = [];
-    let inPeriod = false;
+    let lastFlowDateKey: string | null = null;
 
-    for (let i = 0; i < sorted.length; i++) {
-        const log = sorted[i];
-        const hasFlow = log.flowLevel && log.flowLevel !== 'none';
+    for (const dateKey of sortedDates) {
+        const flow = flowMap.get(dateKey) || 'none';
+        const hasFlow = flow !== 'none';
 
-        if (hasFlow && !inPeriod) {
-            // This is the start of a new period
-            periodStarts.push(parseLocalDate(log.date));
-            inPeriod = true;
-        } else if (!hasFlow) {
-            inPeriod = false;
+        if (!hasFlow) {
+            // No flow today — just continue
+            continue;
         }
 
-        // Also detect a gap of 14+ days between flow days as a new period
-        if (hasFlow && inPeriod && i > 0) {
-            const prevFlowIdx = findPreviousFlowDay(sorted, i);
-            if (prevFlowIdx >= 0) {
-                const gap = differenceInDays(
-                    parseLocalDate(log.date),
-                    parseLocalDate(sorted[prevFlowIdx].date)
-                );
-                if (gap >= 14) {
-                    // This is a new period, not a continuation
-                    periodStarts.push(parseLocalDate(log.date));
-                }
+        // This day has flow — decide if it's a NEW period start or continuation
+        if (lastFlowDateKey === null) {
+            // First flow day ever recorded — it's a period start
+            periodStarts.push(parseLocalDate(dateKey));
+        } else {
+            // Check gap between this flow day and the last flow day
+            const gapDays = differenceInDays(parseLocalDate(dateKey), parseLocalDate(lastFlowDateKey));
+
+            if (gapDays > 7) {
+                // More than 7 days since last flow — this is a new period
+                periodStarts.push(parseLocalDate(dateKey));
             }
+            // If gap <= 7, it's part of the same period — skip
         }
+
+        lastFlowDateKey = dateKey;
     }
 
     return periodStarts;
 }
 
 /**
- * Find the index of the previous day with flow before index i.
- */
-function findPreviousFlowDay(logs: LogEntry[], currentIdx: number): number {
-    for (let j = currentIdx - 1; j >= 0; j--) {
-        if (logs[j].flowLevel && logs[j].flowLevel !== 'none') {
-            return j;
-        }
-    }
-    return -1;
-}
-
-/**
  * Calculate average cycle length from period start dates.
  * Filters out outliers (<21 or >45 days).
+ * Returns null if insufficient data.
  */
-export function calculateAverageCycleLength(periodStartDates: Date[]): number {
-    if (periodStartDates.length < 2) return 28; // Default
+export function calculateAverageCycleLength(periodStartDates: Date[]): number | null {
+    if (periodStartDates.length < 2) return null;
 
     const gaps: number[] = [];
     for (let i = 1; i < periodStartDates.length; i++) {
         const gap = differenceInDays(periodStartDates[i], periodStartDates[i - 1]);
-        // Filter outliers
+        // Filter outliers — typical cycles are 21-45 days
         if (gap >= 21 && gap <= 45) {
             gaps.push(gap);
         }
     }
 
-    if (gaps.length === 0) return 28; // All outliers, use default
+    if (gaps.length === 0) return null;
 
     const sum = gaps.reduce((a, b) => a + b, 0);
     return Math.round(sum / gaps.length);
@@ -119,6 +120,8 @@ export function calculateAverageCycleLength(periodStartDates: Date[]): number {
  * Uses proportional boundaries instead of hardcoded day numbers.
  */
 export function getSmartCyclePhase(cycleDay: number, cycleLength: number): string {
+    if (cycleDay < 1) return 'Menstrual';
+
     const menstrualEnd = Math.round(cycleLength * 0.18);   // ~5 days of 28
     const follicularEnd = Math.round(cycleLength * 0.46);  // ~13 days of 28
     const ovulationEnd = Math.round(cycleLength * 0.54);   // ~15 days of 28
@@ -140,29 +143,46 @@ export function getCurrentCycleInfo(
     profileCycleLength?: number
 ): CycleInfo {
     const periodStartDates = detectPeriodStartDates(logs);
-    const hasSufficientData = periodStartDates.length >= 2;
+    const computedCycleLength = calculateAverageCycleLength(periodStartDates);
+    const hasSufficientData = computedCycleLength !== null;
 
-    // Use computed data if available, otherwise fall back to profile
-    const averageCycleLength = hasSufficientData
-        ? calculateAverageCycleLength(periodStartDates)
-        : (profileCycleLength || 28);
+    // Use computed data if available, otherwise fall back to profile/defaults
+    const averageCycleLength = computedCycleLength || profileCycleLength || 28;
 
+    // Most recent period start — prefer detected over profile
     const lastPeriodStart = periodStartDates.length > 0
         ? periodStartDates[periodStartDates.length - 1]
         : (profileLastPeriodStart || new Date());
 
+    // Normalize to midnight
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const lastStart = new Date(lastPeriodStart);
     lastStart.setHours(0, 0, 0, 0);
 
-    const cycleDay = differenceInDays(today, lastStart) + 1;
-    const daysUntilNextPeriod = Math.max(0, averageCycleLength - cycleDay + 1);
-    const currentPhase = getSmartCyclePhase(cycleDay, averageCycleLength);
+    // Cycle day (1-based)
+    const rawCycleDay = differenceInDays(today, lastStart) + 1;
+
+    // If cycleDay exceeds cycle length, the period is overdue
+    // Keep the raw value so dashboard can show "X days late"
+    const cycleDay = rawCycleDay;
+
+    // Next expected period date
+    const nextPeriodDate = addDays(lastStart, averageCycleLength);
+
+    // Days until next period — can be negative (overdue)
+    const daysUntilNextPeriod = differenceInDays(nextPeriodDate, today);
+
+    // Phase — use modular cycle day if way past due (wraps around)
+    const phaseDay = cycleDay <= averageCycleLength + 7
+        ? cycleDay
+        : ((cycleDay - 1) % averageCycleLength) + 1;
+    const currentPhase = getSmartCyclePhase(phaseDay, averageCycleLength);
 
     return {
         averageCycleLength,
         lastPeriodStart: lastStart,
+        nextPeriodDate,
         cycleDay,
         daysUntilNextPeriod,
         currentPhase,
