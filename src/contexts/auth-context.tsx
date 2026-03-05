@@ -32,6 +32,7 @@ interface AuthContextType {
     updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
     refreshUserProfile: () => Promise<void>;
     refreshUser: () => Promise<CognitoAuthUser | null>;
+    loginAsDemo: () => Promise<void>;
     clearError: () => void;
 }
 
@@ -343,6 +344,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    // Login as demo user (no Cognito needed)
+    const loginAsDemo = async () => {
+        console.log('Logging in as demo user...');
+
+        // Set synthetic tokens so auth guard passes
+        localStorage.setItem('idToken', 'demo-token');
+        localStorage.setItem('accessToken', 'demo-token');
+        localStorage.setItem('refreshToken', 'demo-token');
+        localStorage.setItem('userEmail', 'demo-user-001');
+
+        const demoUser: CognitoAuthUser = {
+            username: 'demo-user-001',
+            email: 'demo@ovira.ai',
+            attributes: { email: 'demo@ovira.ai' },
+            session: null as any,
+        };
+
+        setUser(demoUser);
+        reinitializeClients();
+        await fetchUserProfile('demo-user-001');
+    };
+
     return (
         <AuthContext.Provider
             value={{
@@ -359,6 +382,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 updateProfile,
                 refreshUserProfile,
                 refreshUser,
+                loginAsDemo,
                 clearError,
             }}
         >

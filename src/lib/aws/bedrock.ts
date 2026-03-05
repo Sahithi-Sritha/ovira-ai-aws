@@ -25,7 +25,7 @@ function isRetryableError(error: any): boolean {
 // Bedrock config - defined here (server-side only) to ensure non-NEXT_PUBLIC_ env vars are available.
 // These env vars are NOT accessible in 'use client' modules like config.ts.
 const bedrockConfig = {
-    modelId: process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-5-haiku-20241022-v1:0',
+    modelId: process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-haiku-20240307-v1:0',
     fallbackModelId: process.env.BEDROCK_FALLBACK_MODEL_ID || 'amazon.nova-lite-v1:0',
     region: process.env.BEDROCK_REGION || 'us-east-1',
 };
@@ -186,7 +186,7 @@ export async function invokeWithRetry(
             console.log(`[${new Date().toISOString()}] Attempt ${attempt}/${maxAttempts} — invoking Claude...`);
             const response = await fn();
             console.log(`[${new Date().toISOString()}] Claude succeeded on attempt ${attempt}`);
-            return { response, model_used: 'claude-3-5-haiku', attempts: attempt };
+            return { response, model_used: 'claude-3-haiku', attempts: attempt };
         } catch (error: any) {
             lastError = error;
             console.error(`[${new Date().toISOString()}] Attempt ${attempt} failed:`, error?.name || error?.message);
