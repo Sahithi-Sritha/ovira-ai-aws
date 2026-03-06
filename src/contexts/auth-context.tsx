@@ -32,6 +32,7 @@ interface AuthContextType {
     updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
     refreshUserProfile: () => Promise<void>;
     refreshUser: () => Promise<CognitoAuthUser | null>;
+    loginAsDemo: () => Promise<void>;
     clearError: () => void;
 }
 
@@ -273,15 +274,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         console.log('Completing onboarding for user:', user.username);
 
+        // Build a partial profile from the onboarding data to compute health context
+        const profileSnapshot: UserProfile = {
+            uid: user.username,
+            email: user.email || user.username,
+            displayName: userProfile?.displayName,
+            ageRange: data.ageRange,
+            conditions: data.conditions,
+            language: data.language,
+            onboardingComplete: true,
+            createdAt: userProfile?.createdAt || new Date().toISOString(),
+            averageCycleLength: data.periodDuration ? Math.round(28) : 28,
+            activityLevel: data.activityLevel,
+            heightRange: data.heightRange,
+            lastPeriodStart: data.lastPeriodStart,
+            previousPeriodDates: data.previousPeriodDates,
+            avgCycleLength: data.periodDuration,
+            cycleRegularity: data.cycleRegularity,
+            dietType: data.dietType,
+            stapleGrain: data.stapleGrain,
+            ironRichFoodFrequency: data.ironRichFoodFrequency,
+            waterIntake: data.waterIntake,
+            caffeineIntake: data.caffeineIntake,
+            sleepHabit: data.sleepHabit,
+            recentPainLevel: data.recentPainLevel,
+            recentMoodPattern: data.recentMoodPattern,
+            regularSymptoms: data.regularSymptoms,
+            hasDoctorConsultation: data.hasDoctorConsultation,
+            personalGoal: data.personalGoal,
+        };
+
+        // Generate health context summary for AI personalisation
+        const { buildHealthContext } = await import('@/lib/buildHealthContext');
+        const healthContextSummary = buildHealthContext(profileSnapshot);
+
         const updates: Partial<UserProfile> = {
             ageRange: data.ageRange,
             conditions: data.conditions,
             language: data.language,
             onboardingComplete: true,
+            activityLevel: data.activityLevel,
+            heightRange: data.heightRange,
+            lastPeriodStart: data.lastPeriodStart,
+            previousPeriodDates: data.previousPeriodDates,
+            avgCycleLength: data.periodDuration,
+            cycleRegularity: data.cycleRegularity,
+            dietType: data.dietType,
+            stapleGrain: data.stapleGrain,
+            ironRichFoodFrequency: data.ironRichFoodFrequency,
+            waterIntake: data.waterIntake,
+            caffeineIntake: data.caffeineIntake,
+            sleepHabit: data.sleepHabit,
+            recentPainLevel: data.recentPainLevel,
+            recentMoodPattern: data.recentMoodPattern,
+            regularSymptoms: data.regularSymptoms,
+            hasDoctorConsultation: data.hasDoctorConsultation,
+            personalGoal: data.personalGoal,
+            healthContextSummary,
         };
 
         await updateUserProfileDB(user.username, updates);
-        console.log('Profile updated in DynamoDB');
+        console.log('Profile updated in DynamoDB with health context');
 
         setUserProfile((prev) => {
             const updated = prev ? { ...prev, ...updates } : null;
@@ -343,6 +396,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    // Login as demo user (no Cognito needed)
+    const loginAsDemo = async () => {
+        console.log('Logging in as demo user...');
+
+        // Set synthetic tokens so auth guard passes
+        localStorage.setItem('idToken', 'demo-token');
+        localStorage.setItem('accessToken', 'demo-token');
+        localStorage.setItem('refreshToken', 'demo-token');
+        localStorage.setItem('userEmail', 'demo-user-001');
+
+        const demoUser: CognitoAuthUser = {
+            username: 'demo-user-001',
+            email: 'demo@ovira.ai',
+            attributes: { email: 'demo@ovira.ai' },
+            session: null as any,
+        };
+
+        setUser(demoUser);
+        reinitializeClients();
+        await fetchUserProfile('demo-user-001');
+    };
+
     return (
         <AuthContext.Provider
             value={{
@@ -359,6 +434,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 updateProfile,
                 refreshUserProfile,
                 refreshUser,
+                loginAsDemo,
                 clearError,
             }}
         >
