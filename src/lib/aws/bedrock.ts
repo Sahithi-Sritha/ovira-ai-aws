@@ -54,7 +54,7 @@ function containsProhibitedTerms(text: string): boolean {
 }
 
 // Sanitize AI response to ensure non-diagnostic output
-function sanitizeResponse(text: string): string {
+export function sanitizeResponse(text: string): string {
     let sanitized = text;
 
     // Replace diagnostic language with decision-support language

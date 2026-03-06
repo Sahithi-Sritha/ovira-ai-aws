@@ -73,7 +73,7 @@ export default function ReportsPage() {
                 body: JSON.stringify({
                     logs: logs.map((log) => ({
                         ...log,
-                        date: log.date.toDate().toISOString(),
+                        date: (log.date as any).toDate().toISOString(),
                     })),
                     averageCycleLength: userProfile?.averageCycleLength || 28,
                 }),
@@ -293,8 +293,8 @@ export default function ReportsPage() {
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className="text-center min-w-[50px]">
-                                            <p className="text-lg font-bold">{formatDate(log.date.toDate(), 'd')}</p>
-                                            <p className="text-xs text-text-muted">{formatDate(log.date.toDate(), 'MMM')}</p>
+                                            <p className="text-lg font-bold">{formatDate((log.date as any).toDate(), 'd')}</p>
+                                            <p className="text-xs text-text-muted">{formatDate((log.date as any).toDate(), 'MMM')}</p>
                                         </div>
                                         <div>
                                             <p className="font-medium capitalize">{log.flowLevel} flow</p>
