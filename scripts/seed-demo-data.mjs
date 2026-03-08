@@ -1,11 +1,8 @@
 /**
- * Seed DynamoDB with 90 days of realistic PCOS symptom data for demo user.
+ * Seed DynamoDB with 365 days of realistic PCOS symptom data for Priya Sharma.
  *
  * Usage:
  *   node scripts/seed-demo-data.mjs
- *
- * Requires AWS SDK v3 (already installed in the project).
- * Uses credentials from .env.local.
  */
 
 import { config } from 'dotenv';
@@ -18,18 +15,38 @@ import { DynamoDBDocumentClient, PutCommand, BatchWriteCommand } from '@aws-sdk/
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const USERS_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_USERS_TABLE || 'ovira-users';
 const SYMPTOMS_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_SYMPTOMS_TABLE || 'ovira-symptoms';
+const DOCTORS_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_DOCTORS_TABLE || 'ovira-doctors';
+const DOCUMENTS_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_DOCUMENTS_TABLE || 'ovira-documents';
+const CHAT_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_CHAT_TABLE || 'ovira-chat-history';
+const APPOINTMENTS_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_APPOINTMENTS_TABLE || 'ovira-appointments';
 
-const DEMO_USER = {
-    id: 'demo-user-001',
-    uid: 'demo-user-001',
-    email: 'demo@ovira.ai',
-    displayName: 'Demo User',
-    ageRange: '25-34',
-    conditions: ['PCOS'],
-    language: 'en',
+const TODAY = new Date();
+TODAY.setHours(12, 0, 0, 0);
+
+const PRIYA_ID = "demo-user-ovira-2025";
+
+const DEMO_USER_PRIYA = {
+    id: PRIYA_ID,
+    uid: PRIYA_ID,
+    email: "demo@ovira.ai",
+    displayName: "Priya Sharma (Demo Account)",
+    ageRange: "25-34",
+    conditions: ["PCOS"],
+    averageCycleLength: 34,
+    lastPeriodStart: new Date(TODAY.getTime() - 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    language: "en",
+    dietType: "vegetarian",
+    stapleGrain: "rice",
+    ironRichFoodFrequency: "sometimes",
+    waterIntake: 6,
+    caffeineIntake: "1-2 cups",
+    sleepHabit: "10pm-12am",
+    activityLevel: "lightly_active",
+    healthContextSummary: "Priya is a 27-year-old vegetarian woman from Bangalore with PCOS. She follows a South Indian rice-dominant diet with moderate dal/spinach intake. Her cycle averages 34 days (PCOS-influenced irregularity, range 31-38 days). She experiences moderate-to-severe luteal phase mood changes, persistent acne in follicular phase (androgen excess pattern), and occasional heavy flow days. Her personal goal is understanding PCOS and managing irregular cycles. Iron absorption may be lower due to rice phytates. Chai intake may worsen iron absorption if consumed with meals.",
+    hasDoctorConsultation: true,
+    personalGoal: "Understand my PCOS and manage irregular cycles",
     onboardingComplete: true,
-    averageCycleLength: 32,
-    createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
+    createdAt: new Date(TODAY.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString(),
 };
 
 // ── DynamoDB client ─────────────────────────────────────────────────────────
@@ -57,289 +74,254 @@ function pickMany(arr, min, max) {
     return shuffled.slice(0, count);
 }
 
-function clamp(val, min, max) {
-    return Math.max(min, Math.min(max, val));
-}
+// ── Logic ───────────────────────────────────────────────────────────────────
 
-// ── Cycle phase calculator ──────────────────────────────────────────────────
-function getCyclePhase(dayInCycle, cycleLength) {
-    if (dayInCycle <= 6) return 'menstrual';         // Days 1-6: period
-    if (dayInCycle <= 13) return 'follicular';        // Days 7-13: follicular
-    if (dayInCycle <= 17) return 'ovulation';         // Days 14-17: ovulation window
-    if (dayInCycle <= cycleLength - 5) return 'luteal-early';  // Early luteal
-    return 'luteal-late';                             // Last 5 days: PMS
-}
-
-// ── Symptom generator per phase ─────────────────────────────────────────────
-const PCOS_SYMPTOMS = {
-    menstrual: ['Cramps', 'Bloating', 'Fatigue', 'Back pain', 'Headache', 'Mood swings'],
-    follicular: ['Bloating', 'Acne'],
-    ovulation: ['Bloating', 'Breast tenderness'],
-    'luteal-early': ['Bloating', 'Acne', 'Fatigue', 'Cravings'],
-    'luteal-late': ['Cramps', 'Bloating', 'Mood swings', 'Fatigue', 'Acne', 'Anxiety', 'Insomnia', 'Cravings', 'Headache'],
-};
-
-function generateLog(date, dayInCycle, cycleLength) {
-    const phase = getCyclePhase(dayInCycle, cycleLength);
-    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
-
-    // ── Flow ────────────────────────────────────────────────────────────────
-    let flowLevel;
-    if (dayInCycle === 1) flowLevel = 'medium';
-    else if (dayInCycle === 2 || dayInCycle === 3) flowLevel = 'heavy';
-    else if (dayInCycle === 4) flowLevel = 'medium';
-    else if (dayInCycle === 5 || dayInCycle === 6) flowLevel = 'light';
-    else flowLevel = 'none';
-
-    // ── Pain ─────────────────────────────────────────────────────────────────
-    let painLevel;
-    switch (phase) {
-        case 'menstrual':
-            painLevel = dayInCycle <= 3 ? rand(6, 9) : rand(3, 6);
-            break;
-        case 'follicular':
-            painLevel = rand(0, 2);
-            break;
-        case 'ovulation':
-            painLevel = rand(2, 5); // Mid-cycle pain (mittelschmerz)
-            break;
-        case 'luteal-early':
-            painLevel = rand(1, 3);
-            break;
-        case 'luteal-late':
-            painLevel = rand(3, 6); // PMS cramps
-            break;
-        default:
-            painLevel = rand(0, 3);
-    }
-
-    // PCOS tends toward slightly higher pain — add a bump
-    painLevel = clamp(painLevel + (Math.random() < 0.3 ? 1 : 0), 0, 10);
-
-    // ── Mood ─────────────────────────────────────────────────────────────────
-    let mood;
-    switch (phase) {
-        case 'menstrual':
-            mood = pick(['bad', 'bad', 'neutral', 'terrible']);
-            break;
-        case 'follicular':
-            mood = pick(['good', 'good', 'great', 'neutral']);
-            break;
-        case 'ovulation':
-            mood = pick(['great', 'great', 'good']);
-            break;
-        case 'luteal-early':
-            mood = pick(['neutral', 'good', 'neutral']);
-            break;
-        case 'luteal-late':
-            mood = pick(['bad', 'terrible', 'bad', 'neutral']);
-            break;
-        default:
-            mood = 'neutral';
-    }
-
-    // ── Energy ───────────────────────────────────────────────────────────────
-    let energyLevel;
-    switch (phase) {
-        case 'menstrual':
-            energyLevel = pick(['low', 'low', 'medium']);
-            break;
-        case 'follicular':
-            energyLevel = pick(['medium', 'high', 'medium']);
-            break;
-        case 'ovulation':
-            energyLevel = pick(['high', 'high', 'medium']);
-            break;
-        case 'luteal-early':
-            energyLevel = pick(['medium', 'medium', 'low']);
-            break;
-        case 'luteal-late':
-            energyLevel = pick(['low', 'low', 'medium']);
-            break;
-        default:
-            energyLevel = 'medium';
-    }
-
-    // ── Sleep ────────────────────────────────────────────────────────────────
-    let sleepHours;
-    switch (phase) {
-        case 'menstrual':
-            sleepHours = rand(5, 7) + (Math.random() < 0.5 ? 0.5 : 0);
-            break;
-        case 'follicular':
-            sleepHours = rand(7, 8) + (Math.random() < 0.5 ? 0.5 : 0);
-            break;
-        case 'ovulation':
-            sleepHours = rand(7, 9);
-            break;
-        case 'luteal-early':
-            sleepHours = rand(6, 8);
-            break;
-        case 'luteal-late':
-            sleepHours = rand(5, 7) + (Math.random() < 0.5 ? 0.5 : 0);
-            break;
-        default:
-            sleepHours = rand(6, 8);
-    }
-
-    // ── Symptoms ─────────────────────────────────────────────────────────────
-    const phaseSymptoms = PCOS_SYMPTOMS[phase] || [];
-    const minSymptoms = phase === 'menstrual' || phase === 'luteal-late' ? 2 : 0;
-    const maxSymptoms = phase === 'menstrual' || phase === 'luteal-late' ? 4 : 2;
-    const symptoms = phaseSymptoms.length > 0 ? pickMany(phaseSymptoms, minSymptoms, maxSymptoms) : [];
-
-    // ── Notes ────────────────────────────────────────────────────────────────
-    const phaseNotes = {
-        menstrual: [
-            'Heavy cramps today, took ibuprofen.',
-            'Period started, moderate flow.',
-            'Feeling tired and crampy.',
-            'Used heating pad for cramps.',
-            'Lighter flow today, feeling better.',
-        ],
-        follicular: [
-            'Feeling more energetic!',
-            'Skin clearing up.',
-            'Good workout today.',
-            '',
-            '',
-        ],
-        ovulation: [
-            'Feeling great, lots of energy.',
-            'Slight bloating but good mood.',
-            '',
-            '',
-        ],
-        'luteal-early': [
-            'Cravings starting.',
-            'Slight bloating.',
-            '',
-            '',
-        ],
-        'luteal-late': [
-            'PMS hitting hard today.',
-            'Mood swings and cravings.',
-            'Trouble sleeping, anxious.',
-            'Acne flare-up, feeling low.',
-            'Waiting for period to start.',
-        ],
-    };
-    const notes = pick(phaseNotes[phase] || ['']);
-
-    const id = `${DEMO_USER.id}_${dateStr}`;
-
-    return {
-        id,
-        userId: DEMO_USER.id,
-        date: dateStr,
-        flowLevel,
-        painLevel,
-        mood,
-        energyLevel,
-        sleepHours,
-        symptoms,
-        notes,
-        createdAt: date.toISOString(),
-        updatedAt: date.toISOString(),
-    };
-}
-
-// ── Main ────────────────────────────────────────────────────────────────────
-async function main() {
-    console.log('🌱 Seeding DynamoDB with demo data...\n');
-
-    // 1. Create demo user profile
-    console.log('📝 Creating demo user profile...');
-    await docClient.send(new PutCommand({
-        TableName: USERS_TABLE,
-        Item: DEMO_USER,
-    }));
-    console.log(`   ✓ User "${DEMO_USER.displayName}" created in ${USERS_TABLE}\n`);
-
-    // 2. Generate 90 days of symptom logs
-    console.log('📊 Generating 90 days of symptom logs...');
-    const today = new Date();
-    today.setHours(12, 0, 0, 0);
-
-    const cycleLength = 32;
+function generateLogs() {
     const logs = [];
+    let currentDate = new Date(TODAY.getTime() - 365 * 24 * 60 * 60 * 1000);
+    currentDate.setHours(12, 0, 0, 0);
 
-    // Work backward from today. First period started ~88 days ago.
-    // Cycle 1: days 1-32 (88 to 57 days ago)
-    // Cycle 2: days 1-32 (56 to 25 days ago)
-    // Cycle 3: days 1-24 partial (24 to 1 days ago) + today
-    const firstPeriodStart = new Date(today);
-    firstPeriodStart.setDate(firstPeriodStart.getDate() - 88);
+    let dayInCycle = 1;
+    let cycleLength = rand(31, 38);
+    let monthIndex = 0;
 
-    // Also set lastPeriodStart on the user profile (start of cycle 3)
-    const cycle3Start = new Date(today);
-    cycle3Start.setDate(cycle3Start.getDate() - (88 - 2 * cycleLength));
+    for (let day = 0; day < 365; day++) {
+        monthIndex = Math.floor(day / 30);
 
-    for (let dayOffset = 0; dayOffset < 90; dayOffset++) {
-        const date = new Date(firstPeriodStart);
-        date.setDate(date.getDate() + dayOffset);
+        // PCOS pattern: Menstrual (5-7 days), Follicular, Ovulation (sometimes missed), Luteal (10-14 days)
+        let phase = 'follicular';
+        let periodDuration = rand(5, 7);
 
-        // Calculate which day of which cycle we're in
-        const totalDays = dayOffset;
-        const dayInCycle = (totalDays % cycleLength) + 1;
+        if (dayInCycle <= periodDuration) phase = 'menstrual';
+        else if (dayInCycle <= periodDuration + 7) phase = 'follicular';
+        else if (dayInCycle <= periodDuration + 11) phase = 'ovulation';
+        else if (dayInCycle <= cycleLength - 7) phase = 'luteal-early';
+        else phase = 'luteal-late';
 
-        const log = generateLog(date, dayInCycle, cycleLength);
-        logs.push(log);
-    }
+        // Month-based evolution
+        const severityModifier = monthIndex < 3 ? 1.2 : (monthIndex < 6 ? 1.0 : 0.8);
+        const detailLevel = monthIndex >= 9 ? 1.0 : 0.6;
 
-    // 3. Write logs to DynamoDB in batches of 25 (BatchWrite limit)
-    const batchSize = 25;
-    let written = 0;
+        const dateStr = currentDate.toISOString().split('T')[0];
 
-    for (let i = 0; i < logs.length; i += batchSize) {
-        const batch = logs.slice(i, i + batchSize);
-        const putRequests = batch.map(log => ({
-            PutRequest: { Item: log },
-        }));
-
-        try {
-            await docClient.send(new BatchWriteCommand({
-                RequestItems: {
-                    [SYMPTOMS_TABLE]: putRequests,
-                },
-            }));
-            written += batch.length;
-            process.stdout.write(`\r   Writing: ${written}/${logs.length} logs`);
-        } catch (err) {
-            // Fallback to individual puts if batch fails
-            console.warn(`\n   ⚠ Batch write failed, falling back to individual puts: ${err.message}`);
-            for (const log of batch) {
-                await docClient.send(new PutCommand({
-                    TableName: SYMPTOMS_TABLE,
-                    Item: log,
-                }));
-                written++;
-                process.stdout.write(`\r   Writing: ${written}/${logs.length} logs`);
+        // Skip some logs for early months to simulate "not tracking regularly"
+        if (monthIndex < 6 && Math.random() > 0.4 && day % 2 === 0) {
+            // keep it
+        } else if (monthIndex < 6 && Math.random() > 0.7) {
+            // skip
+            currentDate.setDate(currentDate.getDate() + 1);
+            dayInCycle++;
+            if (dayInCycle > cycleLength) {
+                dayInCycle = 1;
+                cycleLength = rand(31, 38);
             }
+            continue;
+        }
+
+        // Flow Level
+        let flowLevel = 'none';
+        if (phase === 'menstrual') {
+            const isHeavyCycle = Math.random() < 0.3;
+            if (isHeavyCycle && dayInCycle <= 3) flowLevel = 'heavy';
+            else if (dayInCycle <= 3) flowLevel = 'medium';
+            else flowLevel = 'light';
+        }
+
+        // Pain Level (PCOS pattern: 5-8 period, 3-6 late luteal)
+        let painLevel = 0;
+        if (phase === 'menstrual') painLevel = rand(5, 8);
+        else if (phase === 'luteal-late') painLevel = rand(3, 6);
+        else painLevel = rand(0, 2);
+
+        painLevel = Math.min(10, Math.round(painLevel * severityModifier));
+
+        // Mood (bad/terrible for last 5 days in 70% of cycles)
+        let mood = 'neutral';
+        if (phase === 'luteal-late' && dayInCycle > cycleLength - 5) {
+            mood = Math.random() < 0.7 ? pick(['bad', 'terrible']) : 'neutral';
+        } else if (phase === 'menstrual') {
+            mood = pick(['bad', 'neutral']);
+        } else if (phase === 'ovulation') {
+            mood = pick(['good', 'great']);
+        } else {
+            mood = pick(['good', 'neutral']);
+        }
+
+        // Energy (gradually improves follicular)
+        let energyLevel = 'medium';
+        if (phase === 'menstrual') energyLevel = 'low';
+        else if (phase === 'follicular') energyLevel = dayInCycle < periodDuration + 4 ? 'medium' : 'high';
+        else if (phase === 'ovulation') energyLevel = 'high';
+        else energyLevel = 'medium';
+
+        // Sleep
+        let sleepHours = phase === 'luteal-late' ? 6 + Math.random() : 7 + Math.random();
+
+        // Symptoms
+        const symptoms = [];
+        if (phase === 'menstrual') symptoms.push(...pickMany(['Cramps', 'Fatigue', 'Bloating', 'Back pain'], 1, 3));
+        if (phase === 'follicular' && Math.random() < 0.65) symptoms.push('Acne');
+        if (phase === 'luteal-late') {
+            if (Math.random() < 0.6) symptoms.push('Anxiety');
+            symptoms.push(...pickMany(['Mood swings', 'Bloating', 'Breast tenderness'], 1, 3));
+        }
+
+        // Notes (Indian context)
+        let notes = "";
+        if (Math.random() < detailLevel) {
+            if (phase === 'menstrual' && dayInCycle === 1) notes = pick(["Period started, jaggery and ginger tea helping", "Period day 1 — crampy"]);
+            else if (phase === 'follicular' && Math.random() < 0.3) notes = pick(["Skin breaking out again", "Had idli for lunch, good energy"]);
+            else if (phase === 'luteal-late' && Math.random() < 0.3) notes = pick(["Mood swings so bad today", "Craving sweets — probably PMS", "Chai not helping today 😅"]);
+        }
+
+        logs.push({
+            id: `${PRIYA_ID}_${dateStr}`,
+            userId: PRIYA_ID,
+            date: dateStr,
+            flowLevel,
+            painLevel,
+            mood,
+            energyLevel,
+            sleepHours,
+            symptoms,
+            notes,
+            createdAt: currentDate.toISOString(),
+            updatedAt: currentDate.toISOString(),
+        });
+
+        currentDate.setDate(currentDate.getDate() + 1);
+        dayInCycle++;
+        if (dayInCycle > cycleLength) {
+            dayInCycle = 1;
+            cycleLength = rand(31, 38);
         }
     }
-
-    // 4. Update user profile with lastPeriodStart
-    const lastPeriodStr = cycle3Start.toISOString().split('T')[0];
-    await docClient.send(new PutCommand({
-        TableName: USERS_TABLE,
-        Item: {
-            ...DEMO_USER,
-            lastPeriodStart: lastPeriodStr,
-        },
-    }));
-
-    console.log(`\n   ✓ ${written} symptom logs written to ${SYMPTOMS_TABLE}`);
-    console.log(`\n📅 Data covers: ${logs[0].date} to ${logs[logs.length - 1].date}`);
-    console.log(`   Cycle length: ${cycleLength} days`);
-    console.log(`   Last period start: ${lastPeriodStr}`);
-    console.log(`   Cycles: 2 complete + 1 partial\n`);
-    console.log('✅ Seeding complete! Demo user is ready.\n');
-    console.log('   Login as: demo@ovira.ai');
-    console.log('   Or use the "Try Demo" button on the landing page.\n');
+    return logs;
 }
 
-main().catch(err => {
-    console.error('❌ Seeding failed:', err);
-    process.exit(1);
-});
+async function writeBatches(table, items) {
+    const batchSize = 25;
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const requests = batch.map(item => ({ PutRequest: { Item: item } }));
+        await docClient.send(new BatchWriteCommand({
+            RequestItems: { [table]: requests }
+        }));
+        if (i % 100 === 0) process.stdout.write(`.`);
+    }
+}
+
+async function main() {
+    console.log(`🌱 Seeding data for Priya Sharma (${PRIYA_ID})...`);
+
+    // 1. User Profile
+    await docClient.send(new PutCommand({ TableName: USERS_TABLE, Item: DEMO_USER_PRIYA }));
+    console.log("   ✓ User Profile seeded.");
+
+    // 2. Doctor
+    await docClient.send(new PutCommand({
+        TableName: DOCTORS_TABLE,
+        Item: {
+            userId: PRIYA_ID,
+            doctorId: "doctor-001",
+            name: "Dr. Meera Nair",
+            specialty: "Gynaecologist",
+            hospital: "Apollo Hospitals",
+            city: "Bangalore",
+            notes: "Diagnosed PCOS in September 2024. Recommended lifestyle changes and cycle tracking.",
+            isPreferred: true
+        }
+    }));
+    console.log("   ✓ Doctor seeded.");
+
+    // 3. Document
+    await docClient.send(new PutCommand({
+        TableName: DOCUMENTS_TABLE,
+        Item: {
+            userId: PRIYA_ID,
+            docId: "doc-001",
+            fileSize: 245000,
+            shouldIncludeInSummary: true
+        }
+    }));
+    await docClient.send(new PutCommand({
+        TableName: DOCUMENTS_TABLE,
+        Item: {
+            userId: PRIYA_ID,
+            docId: "doc-002",
+            filename: "Blood_Test_Aug2024.pdf",
+            category: "Blood Test",
+            uploadedAt: "2024-08-10",
+            s3Key: `${PRIYA_ID}/doc-002-Blood_Test_Aug2024.pdf`,
+            fileSize: 156000,
+            shouldIncludeInSummary: false
+        }
+    }));
+    console.log("   ✓ Document stubs seeded.");
+
+    // 4. Chat Session & History
+    const session = {
+        userId: PRIYA_ID,
+        sessionId_timestamp: `session-001#${new Date("2025-01-15").toISOString()}`,
+        type: "doctor_session",
+        createdAt: "2025-01-15T10:00:00Z",
+        generatedSummary: true,
+        summaryText: "Chief Complaint: Irregular cycles and acne. History: PCOS diagnosed Sep 2024. Patient tracking symptoms.",
+        timestamp: "2025-01-15T10:00:00Z"
+    };
+    await docClient.send(new PutCommand({ TableName: CHAT_TABLE, Item: session }));
+
+    const messages = [
+        "Hi Aria, I've been noticing more acne lately. Is this typical for PCOS?",
+        "Yes Priya, androgen excess in PCOS often leads to acne, especially in the follicular phase.",
+        "Can jaggery help with my energy levels during periods?",
+        "Jaggery is a good source of iron and energy, but watch the sugar spike.",
+        "I missed my ovulation this month, should I be worried?",
+        "PCOS can cause occasional anovulatory cycles. Keep tracking to see the pattern.",
+        "What's a good Ragi recipe for iron?",
+        "Ragi malt or Ragi mudde are excellent. Pair with Vitamin C for better iron absorption.",
+        "I'm feeling very anxious today, could it be PMS?",
+        "Anxiety is a common luteal phase symptom in PCOS. Deep breathing might help."
+    ].map((content, i) => ({
+        userId: PRIYA_ID,
+        sessionId_timestamp: `recent-chat#${new Date(TODAY.getTime() - (20 - i) * 24 * 60 * 60 * 1000).toISOString()}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content,
+        timestamp: new Date(TODAY.getTime() - (20 - i) * 24 * 60 * 60 * 1000).toISOString(),
+    }));
+
+    await writeBatches(CHAT_TABLE, messages);
+    console.log("\n   ✓ Chat history seeded.");
+
+    // 5. Upcoming Appointment (Tomorrow)
+    const tomorrow = new Date(TODAY.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrowStr = tomorrow.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    await docClient.send(new PutCommand({
+        TableName: APPOINTMENTS_TABLE,
+        Item: {
+            userId: PRIYA_ID,
+            appointmentId: "appt-demo-001",
+            doctorId: "doctor-001",
+            doctorName: "Dr. Meera Nair",
+            hospital: "Apollo Hospitals",
+            date: tomorrowStr,
+            time: "10:30 AM",
+            status: "confirmed",
+            healthSummaryGenerated: true,
+            healthSummarySent: false,
+            summaryText: "Patient presents with regular concerns about PCOS. Cycle analysis shows 34 day average. No severe pain flags this month. Mood pattern stable.",
+            createdAt: TODAY.toISOString()
+        }
+    }));
+    console.log("   ✓ Upcoming appointment seeded.");
+
+    // 5. Symptom Logs (365 days)
+    console.log("   📊 Generating 365 days of logs...");
+    const logs = generateLogs();
+    await writeBatches(SYMPTOMS_TABLE, logs);
+
+    console.log(`\n\n✅ Seeding complete! Seeded ${logs.length} logs, 1 doctor, 1 document for Priya Sharma.`);
+}
+
+main().catch(console.error);

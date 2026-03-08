@@ -1,388 +1,472 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { DEMO_DOCTORS, Doctor, TimeSlot } from '@/lib/constants/doctors';
+import { Input } from '@/components/ui/Input';
 import {
-    MapPin,
-    Calendar,
-    Clock,
-    Star,
-    Users,
-    Award,
-    ArrowRight,
-    CheckCircle2,
-    Loader2,
-    CalendarDays,
-    X,
+    Users, Star, MapPin, Calendar, Clock,
+    ArrowRight, Check, Loader2, Sparkles,
+    ChevronRight, ExternalLink, Filter, Search
 } from 'lucide-react';
-import { clsx } from 'clsx';
-import Link from 'next/link';
 
-// ─── Filter Data ─────────────────────────────────────────────────────────────
+const DEMO_DOCTORS = [
+    {
+        doctorId: "dr-001", name: "Dr. Meera Nair",
+        specialty: "Gynaecologist and Obstetrician",
+        hospital: "Apollo Hospitals, Bannerghatta Road", city: "Bangalore",
+        experience: "18 years", languages: ["English", "Hindi", "Malayalam"],
+        consultationFee: "Rs 800", rating: 4.8, reviews: 312,
+        focusAreas: ["PCOS", "Endometriosis", "Irregular Cycles", "Fertility"],
+        address: "154/11, Bannerghatta Main Rd, Bangalore 560076",
+        mapsUrl: "https://maps.google.com/?q=Apollo+Hospitals+Bannerghatta+Bangalore",
+        slots: [
+            { date: "Tomorrow", time: "10:00 AM", available: true },
+            { date: "Tomorrow", time: "11:30 AM", available: true },
+            { date: "Tomorrow", time: "2:00 PM", available: false },
+            { date: "Day after", time: "9:00 AM", available: true },
+        ]
+    },
+    {
+        doctorId: "dr-002", name: "Dr. Priya Subramanian",
+        specialty: "Reproductive Endocrinologist",
+        hospital: "Manipal Hospital, Whitefield", city: "Bangalore",
+        experience: "12 years", languages: ["English", "Tamil", "Kannada"],
+        consultationFee: "Rs 1,200", rating: 4.9, reviews: 189,
+        focusAreas: ["PCOS", "Hormonal Imbalance", "Thyroid"],
+        address: "ITPL Main Rd, Whitefield, Bangalore 560066",
+        mapsUrl: "https://maps.google.com/?q=Manipal+Hospital+Whitefield",
+        slots: [{ date: "Day after", time: "9:00 AM", available: true }]
+    },
+    {
+        doctorId: "dr-003", name: "Dr. Anjali Sharma",
+        specialty: "Gynaecologist", hospital: "Max Healthcare, Saket", city: "Delhi",
+        experience: "15 years", languages: ["English", "Hindi"],
+        consultationFee: "Rs 700", rating: 4.7, reviews: 245,
+        focusAreas: ["PMS", "Heavy Bleeding", "Endometriosis"],
+        address: "1, 2, Press Enclave Marg, Saket, Delhi 110017",
+        mapsUrl: "https://maps.google.com/?q=Max+Healthcare+Saket",
+        slots: [{ date: "Tomorrow", time: "3:00 PM", available: true }]
+    }
+];
 
-const CITIES = ["All", "Bangalore", "Delhi"];
-const SPECIALTIES = ["All", "PCOS", "Endometriosis", "Irregular Cycles", "Fertility", "Thyroid"];
+const CITIES = ['All', 'Bangalore', 'Delhi', 'Mumbai', 'Chennai'];
+const FOCUS_AREAS = ['All', 'PCOS', 'Fertility', 'Endometriosis', 'PMS', 'Thyroid'];
 
-// ─── Components ───────────────────────────────────────────────────────────────
-
-export default function DoctorsPage() {
+export default function DoctorsDiscoveryPage() {
     const { user, userProfile } = useAuth();
-    const [selectedCity, setSelectedCity] = useState("All");
-    const [selectedSpecialty, setSelectedSpecialty] = useState("All");
-    const [isPremium, setIsPremium] = useState(false);
+    const router = useRouter();
+    const [selectedCity, setSelectedCity] = useState('Bangalore');
+    const [selectedFocus, setSelectedFocus] = useState('All');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [bookingDoctor, setBookingDoctor] = useState<any>(null);
+    const [selectedSlot, setSelectedSlot] = useState<any>(null);
+    const [isBooking, setIsBooking] = useState(false);
+    const [bookingStage, setBookingStage] = useState<'picker' | 'confirming' | 'confirmed'>('picker');
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
-    // Modal States
-    const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-    const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
-    const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-    const [isBookingLoading, setIsBookingLoading] = useState(false);
-    const [bookingResult, setBookingResult] = useState<{ appointmentId: string; summaryGenerated: boolean } | null>(null);
-    const [summaryContent, setSummaryContent] = useState<string | null>(null);
-
-    const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
-
-    useEffect(() => {
-        if (userProfile?.isPremium) {
-            setIsPremium(true);
-        }
-    }, [userProfile]);
-
-    // Polling for summary status
-    useEffect(() => {
-        let interval: NodeJS.Timeout;
-
-        if (bookingResult && !bookingResult.summaryGenerated) {
-            interval = setInterval(async () => {
-                try {
-                    const res = await fetch(`/api/appointments/${bookingResult.appointmentId}/status`);
-                    const data = await res.json();
-                    if (data.success && data.summaryGenerated) {
-                        setBookingResult(prev => prev ? { ...prev, summaryGenerated: true } : null);
-                        setSummaryContent(data.summaryContent);
-                        clearInterval(interval);
-                    }
-                } catch (err) {
-                    console.error('Polling error:', err);
-                }
-            }, 3000);
-        }
-
-        return () => clearInterval(interval);
-    }, [bookingResult]);
-
-    // Filters logic
-    const filteredDoctors = DEMO_DOCTORS.filter(dr => {
-        const cityMatch = selectedCity === "All" || dr.city === selectedCity;
-        const specialtyMatch = selectedSpecialty === "All" || dr.specialisation.includes(selectedSpecialty);
-        return cityMatch && specialtyMatch;
+    const filteredDoctors = DEMO_DOCTORS.filter(doc => {
+        const matchesCity = selectedCity === 'All' || doc.city === selectedCity;
+        const matchesFocus = selectedFocus === 'All' || doc.focusAreas.includes(selectedFocus);
+        const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            doc.specialty.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesCity && matchesFocus && matchesSearch;
     });
 
-    const handleBookClick = (doctor: Doctor) => {
-        if (!isPremium) {
-            setIsUpgradeModalOpen(true);
+    const handleBookClick = (doctor: any) => {
+        if (!userProfile?.isPremium) {
+            setShowUpgradeModal(true);
             return;
         }
-        setSelectedDoctor(doctor);
+        setBookingDoctor(doctor);
+        setBookingStage('picker');
         setSelectedSlot(null);
-        setIsBookingModalOpen(true);
     };
 
-    const confirmBooking = async () => {
-        if (!selectedDoctor || !selectedSlot || !user) return;
+    const handleConfirmBooking = async () => {
+        if (!selectedSlot || !user) return;
 
-        setIsBookingLoading(true);
+        setIsBooking(true);
+        setBookingStage('confirming');
+
         try {
+            // 1. Book the appointment
             const res = await fetch('/api/doctors/book', {
                 method: 'POST',
-                body: JSON.stringify({
-                    userId: user.username || user.email,
-                    doctorId: selectedDoctor.doctorId,
-                    date: selectedSlot.date,
-                    time: selectedSlot.time,
-                }),
                 headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: user.username,
+                    doctorId: bookingDoctor.doctorId,
+                    doctorName: bookingDoctor.name,
+                    hospital: bookingDoctor.hospital,
+                    address: bookingDoctor.address,
+                    mapsUrl: bookingDoctor.mapsUrl,
+                    date: selectedSlot.date,
+                    time: selectedSlot.time
+                })
             });
             const data = await res.json();
 
             if (data.success) {
-                setBookingResult({
-                    appointmentId: data.appointmentId,
-                    summaryGenerated: false
+                // 2. Start summary generation (fire and forget handled by API mostly, but we trigger it)
+                fetch('/api/appointments/generate-summary', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: user.username,
+                        appointmentId: data.appointmentId
+                    })
                 });
+
+                setBookingStage('confirmed');
+                // Auto-poll or redirect handled in the UI
+                setTimeout(() => {
+                    router.push(`/appointments/${data.appointmentId}`);
+                }, 3000);
             }
         } catch (err) {
             console.error('Booking failed:', err);
+            setBookingStage('picker');
         } finally {
-            setIsBookingLoading(false);
+            setIsBooking(false);
         }
     };
 
-    const getCalendarUrl = () => {
-        if (!selectedDoctor || !selectedSlot) return '#';
-        const date = selectedSlot.date === "Today" ? new Date().toISOString().split('T')[0] : new Date(Date.now() + 86400000).toISOString().split('T')[0];
-        const time = selectedSlot.time.replace(':', '').replace(' ', '');
-        const title = encodeURIComponent(`Appointment with ${selectedDoctor.name}`);
-        const details = encodeURIComponent(`${selectedDoctor.hospital}, ${selectedDoctor.city}`);
-        // Simple Google Calendar link (just for demo purposes)
-        return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}`;
-    };
-
     return (
-        <div className="max-w-7xl mx-auto space-y-8">
+        <div className="max-w-6xl mx-auto pb-12">
             {/* Header */}
-            <div className="space-y-2">
-                <h1 className="text-3xl font-bold text-text-primary">Find a Women's Health Specialist</h1>
-                <p className="text-text-secondary">Book an appointment and send your health summary &mdash; all in one place</p>
+            <div className="mb-8">
+                <h1 className="text-3xl font-bold mb-2">Find a Women Health Specialist</h1>
+                <p className="text-text-secondary max-w-2xl">
+                    Book your appointment. We automatically prepare your complete health summary
+                    so your doctor walks in already knowing your history.
+                </p>
             </div>
 
             {/* Filters */}
-            <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                    <span className="text-sm font-medium text-text-muted self-center mr-2">City:</span>
-                    {CITIES.map(city => (
-                        <button
-                            key={city}
-                            onClick={() => setSelectedCity(city)}
-                            className={clsx(
-                                "px-4 py-1.5 rounded-full text-sm transition-all border",
-                                selectedCity === city
-                                    ? "bg-primary border-primary text-white"
-                                    : "bg-surface border-border text-text-secondary hover:border-primary/50"
-                            )}
-                        >
-                            {city}
-                        </button>
-                    ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    <span className="text-sm font-medium text-text-muted self-center mr-2">Specialty:</span>
-                    {SPECIALTIES.map(spec => (
-                        <button
-                            key={spec}
-                            onClick={() => setSelectedSpecialty(spec)}
-                            className={clsx(
-                                "px-4 py-1.5 rounded-full text-sm transition-all border",
-                                selectedSpecialty === spec
-                                    ? "bg-accent border-accent text-white"
-                                    : "bg-surface border-border text-text-secondary hover:border-accent/50"
-                            )}
-                        >
-                            {spec}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Doctors Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredDoctors.map(doctor => (
-                    <Card key={doctor.doctorId} className="p-0 overflow-hidden group hover:shadow-xl transition-all duration-300 border-border/50">
-                        <div className="p-6 space-y-4">
-                            {/* Doctor Header */}
-                            <div className="flex justify-between items-start">
-                                <div className="flex gap-4">
-                                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
-                                        {doctor.name.split(' ').map(n => n[0]).join('')}
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-lg text-text-primary group-hover:text-primary transition-colors">{doctor.name}</h3>
-                                        <div className="flex items-center gap-1 text-xs text-text-secondary">
-                                            <Star size={14} className="text-yellow-500 fill-yellow-500" />
-                                            <span className="font-bold text-text-primary">{doctor.rating}</span>
-                                            <span>({doctor.reviews} reviews)</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Info */}
-                            <div className="space-y-2 text-sm">
-                                <p className="text-primary font-medium">{doctor.specialty}</p>
-                                <div className="flex items-center gap-2 text-text-secondary">
-                                    <MapPin size={16} />
-                                    <span>{doctor.hospital}, {doctor.city}</span>
-                                </div>
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                    {doctor.specialisation.slice(0, 3).map(s => (
-                                        <span key={s} className="bg-surface-elevated px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold text-text-muted border border-border/50">
-                                            {s}
-                                        </span>
-                                    ))}
-                                </div>
-                                <p className="text-text-secondary mt-1">
-                                    <span className="font-medium text-text-primary">{doctor.languages.join(', ')}</span> &bull; {doctor.experience} experience
-                                </p>
-                            </div>
-
-                            <div className="pt-4 border-t border-border/50 flex flex-col gap-3">
-                                <div className="flex justify-between items-center text-sm">
-                                    <div className="flex items-center gap-2 text-green-600 font-medium">
-                                        <Clock size={16} />
-                                        <span>Next slot: {doctor.slots.find(s => s.available)?.date} {doctor.slots.find(s => s.available)?.time}</span>
-                                    </div>
-                                    <div className="font-bold text-text-primary">{doctor.consultationFee}</div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <Button variant="secondary" size="sm" onClick={() => handleBookClick(doctor)}>View Slots</Button>
-                                    <Button size="sm" onClick={() => handleBookClick(doctor)}>Book now</Button>
-                                </div>
-                            </div>
+            <div className="grid lg:grid-cols-4 gap-6 mb-8">
+                <div className="lg:col-span-1 space-y-6">
+                    <div>
+                        <label className="block text-sm font-medium mb-2">Search</label>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+                            <Input
+                                placeholder="Doctor name or specialty..."
+                                className="pl-10"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
                         </div>
-                    </Card>
-                ))}
-            </div>
+                    </div>
 
-            {/* Booking Modal */}
-            {isBookingModalOpen && selectedDoctor && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { if (!bookingResult) setIsBookingModalOpen(false); }} />
-                    <Card className="relative w-full max-w-lg overflow-hidden bg-surface animate-in fade-in zoom-in duration-200">
-                        {bookingResult ? (
-                            <div className="p-8 text-center space-y-6">
-                                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600">
-                                    <CheckCircle2 size={32} />
-                                </div>
-                                <div className="space-y-2">
-                                    <h2 className="text-2xl font-bold text-text-primary">Appointment Confirmed!</h2>
-                                    <p className="text-text-secondary font-medium">{selectedDoctor.name} &bull; {selectedDoctor.hospital}</p>
-                                    <p className="text-primary font-bold">{selectedSlot?.date}, {selectedSlot?.time}</p>
-                                    <p className="text-xs text-text-muted">{selectedDoctor.city}</p>
-                                </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-3 flex items-center gap-2">
+                            <MapPin size={16} /> City
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                            {CITIES.map(city => (
+                                <button
+                                    key={city}
+                                    onClick={() => setSelectedCity(city)}
+                                    className={`px-3 py-1.5 rounded-full text-sm border transition-all ${selectedCity === city
+                                            ? 'bg-primary text-white border-primary shadow-sm'
+                                            : 'bg-surface border-border text-text-secondary hover:border-primary/30'
+                                        }`}
+                                >
+                                    {city}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
-                                <div className="bg-surface-elevated rounded-2xl p-6 border border-border/50">
-                                    {!bookingResult.summaryGenerated ? (
-                                        <div className="flex flex-col items-center gap-4">
-                                            <Loader2 className="animate-spin text-primary" size={32} />
-                                            <p className="text-sm font-medium text-text-primary">Ovira is preparing your health summary for {selectedDoctor.name.split(' ')[0]}...</p>
+                    <div>
+                        <label className="block text-sm font-medium mb-3 flex items-center gap-2">
+                            <Filter size={16} /> Focus Area
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                            {FOCUS_AREAS.map(area => (
+                                <button
+                                    key={area}
+                                    onClick={() => setSelectedFocus(area)}
+                                    className={`px-3 py-1.5 rounded-full text-sm border transition-all ${selectedFocus === area
+                                            ? 'bg-accent text-white border-accent shadow-sm'
+                                            : 'bg-surface border-border text-text-secondary hover:border-accent/30'
+                                        }`}
+                                >
+                                    {area}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Doctor List */}
+                <div className="lg:col-span-3 space-y-4">
+                    {filteredDoctors.length > 0 ? (
+                        filteredDoctors.map(doctor => (
+                            <Card key={doctor.doctorId} className="overflow-hidden hover:shadow-md transition-shadow">
+                                <CardContent className="p-0">
+                                    <div className="p-6 md:flex gap-6">
+                                        <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0 mb-4 md:mb-0">
+                                            <Users size={32} className="text-primary" />
                                         </div>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            <div className="flex items-center gap-3 text-green-600 justify-center">
-                                                <CheckCircle2 size={24} />
-                                                <span className="font-bold">Health Summary Ready</span>
+                                        <div className="flex-1">
+                                            <div className="md:flex justify-between items-start mb-2">
+                                                <div>
+                                                    <h3 className="text-xl font-bold flex items-center gap-2">
+                                                        {doctor.name}
+                                                        <span className="flex items-center gap-1 text-sm bg-yellow-400/10 text-yellow-600 px-2 py-0.5 rounded-full font-medium">
+                                                            <Star size={14} fill="currentColor" /> {doctor.rating}
+                                                        </span>
+                                                    </h3>
+                                                    <p className="text-primary font-medium">{doctor.specialty}</p>
+                                                </div>
+                                                <div className="text-right mt-2 md:mt-0">
+                                                    <p className="text-lg font-bold text-text-primary">{doctor.consultationFee}</p>
+                                                    <p className="text-xs text-text-muted">Consultation Fee</p>
+                                                </div>
                                             </div>
-                                            <div className="text-left bg-white p-4 rounded-xl text-xs text-text-secondary line-clamp-3 italic ring-1 ring-border/50">
-                                                "{summaryContent}"
+
+                                            <p className="text-text-secondary text-sm flex items-center gap-1 mb-4">
+                                                <MapPin size={14} className="text-text-muted" /> {doctor.hospital}, {doctor.city}
+                                            </p>
+
+                                            <div className="flex flex-wrap gap-1.5 mb-4">
+                                                {doctor.focusAreas.map(area => (
+                                                    <span key={area} className="px-2 py-0.5 bg-accent/5 text-accent text-[11px] font-bold rounded-md border border-accent/10">
+                                                        {area}
+                                                    </span>
+                                                ))}
                                             </div>
-                                            <div className="flex flex-col gap-2 pt-2">
-                                                <Link href={`/appointments/${bookingResult.appointmentId}/summary`} className="w-full">
-                                                    <Button className="w-full">
-                                                        View My Summary
-                                                    </Button>
-                                                </Link>
+
+                                            <div className="grid grid-cols-2 gap-4 text-xs text-text-muted mb-6">
+                                                <div className="flex items-center gap-2">
+                                                    <Clock size={14} /> {doctor.experience} experience
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Loader2 size={14} className="text-green-500" /> {doctor.reviews} happy patients
+                                                </div>
+                                            </div>
+
+                                            <div className="flex gap-3">
+                                                <Button
+                                                    variant="primary"
+                                                    className="flex-1 rounded-xl shadow-button py-2.5 h-auto text-sm"
+                                                    onClick={() => handleBookClick(doctor)}
+                                                >
+                                                    Book Appointment
+                                                    <ChevronRight size={16} className="ml-1" />
+                                                </Button>
                                                 <Button
                                                     variant="secondary"
-                                                    className="w-full"
-                                                    onClick={async () => {
-                                                        const res = await fetch('/api/appointments/send-summary', {
-                                                            method: 'POST',
-                                                            body: JSON.stringify({ appointmentId: bookingResult.appointmentId }),
-                                                            headers: { 'Content-Type': 'application/json' }
-                                                        });
-                                                        const data = await res.json();
-                                                        if (data.success) {
-                                                            alert(`Summary sent to Dr. ${selectedDoctor.name.split(' ')[1] || selectedDoctor.name}!`);
-                                                        }
-                                                    }}
+                                                    className="flex-1 rounded-xl py-2.5 h-auto text-sm"
                                                 >
-                                                    Send to {selectedDoctor.name.split(' ')[0]}
+                                                    View Profile
                                                 </Button>
-                                                <a href={getCalendarUrl()} target="_blank" rel="noopener noreferrer" className="w-full">
-                                                    <Button variant="outline" className="w-full flex gap-2">
-                                                        <CalendarDays size={18} />
-                                                        Add to Calendar
-                                                    </Button>
-                                                </a>
                                             </div>
                                         </div>
-                                    )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ))
+                    ) : (
+                        <div className="bg-surface border border-dashed border-border rounded-2xl p-12 text-center">
+                            <Users size={48} className="mx-auto text-text-muted mb-4 opacity-20" />
+                            <h3 className="text-lg font-medium text-text-secondary">No doctors found</h3>
+                            <p className="text-text-muted">Try adjusting your filters or search query.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Upgrade Modal */}
+            {showUpgradeModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-surface rounded-3xl p-8 max-w-md w-full shadow-2xl scale-in-center">
+                        <div className="w-16 h-16 bg-accent/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                            <Sparkles size={32} className="text-accent" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-center mb-2">Book with Confidence</h2>
+                        <p className="text-text-secondary text-center mb-6">
+                            Doctor booking and AI-generated health summaries are exclusive to <strong>Ovira Pro</strong>.
+                        </p>
+                        <div className="space-y-4 mb-8">
+                            <div className="flex items-center gap-3 text-sm">
+                                <div className="w-5 h-5 bg-green-500/20 text-green-600 rounded-full flex items-center justify-center shrink-0">
+                                    <Check size={12} strokeWidth={4} />
                                 </div>
-                                {!bookingResult.summaryGenerated && (
-                                    <Button variant="ghost" onClick={() => setIsBookingModalOpen(false)}>Close for now</Button>
-                                )}
+                                Prepare doctors with your 12-month summary
                             </div>
-                        ) : (
-                            <div className="p-0">
-                                <div className="p-6 border-b border-border flex justify-between items-center">
-                                    <h3 className="font-bold text-xl">Select Time Slot</h3>
-                                    <button onClick={() => setIsBookingModalOpen(false)}><X size={20} /></button>
+                            <div className="flex items-center gap-3 text-sm">
+                                <div className="w-5 h-5 bg-green-500/20 text-green-600 rounded-full flex items-center justify-center shrink-0">
+                                    <Check size={12} strokeWidth={4} />
                                 </div>
-                                <div className="p-6 space-y-6">
-                                    <div className="flex gap-4">
-                                        <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                                            {selectedDoctor.name.split(' ').map(n => n[0]).join('')}
+                                One-click secure health record sharing
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-3">
+                            <Button variant="primary" className="rounded-2xl py-4 h-auto text-base font-bold shadow-accent">
+                                Upgrade to Pro
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                className="rounded-2xl py-4 h-auto text-base"
+                                onClick={() => setShowUpgradeModal(false)}
+                            >
+                                Not now
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Booking Modal */}
+            {bookingDoctor && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-surface rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        {/* Modal Header */}
+                        <div className="p-6 border-b border-border flex items-center justify-between">
+                            <h2 className="text-xl font-bold">
+                                {bookingStage === 'confirmed' ? 'Successfully Booked' : `Book with ${bookingDoctor.name}`}
+                            </h2>
+                            <button
+                                onClick={() => !isBooking && setBookingDoctor(null)}
+                                className="p-2 hover:bg-surface-elevated rounded-full transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="p-6">
+                            {bookingStage === 'picker' && (
+                                <>
+                                    <div className="flex items-center gap-4 mb-8 p-4 bg-surface-elevated rounded-2xl">
+                                        <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                                            <Users size={24} className="text-primary" />
                                         </div>
                                         <div>
-                                            <p className="font-bold text-text-primary">{selectedDoctor.name}</p>
-                                            <p className="text-xs text-text-secondary">{selectedDoctor.specialty}</p>
+                                            <p className="font-bold">{bookingDoctor.name}</p>
+                                            <p className="text-sm text-text-secondary">{bookingDoctor.hospital}</p>
+                                        </div>
+                                    </div>
+
+                                    <h3 className="font-bold mb-4 flex items-center gap-2">
+                                        <Calendar size={18} className="text-primary" /> Select Available Slot
+                                    </h3>
+
+                                    <div className="space-y-6 mb-8">
+                                        {['Tomorrow', 'Day after'].map(day => (
+                                            <div key={day}>
+                                                <p className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">{day}</p>
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    {bookingDoctor.slots
+                                                        .filter((s: any) => s.date === day)
+                                                        .map((slot: any, idx: number) => (
+                                                            <button
+                                                                key={idx}
+                                                                disabled={!slot.available}
+                                                                onClick={() => setSelectedSlot(slot)}
+                                                                className={`p-3 rounded-2xl border text-sm transition-all text-center ${selectedSlot === slot
+                                                                        ? 'bg-primary border-primary text-white shadow-md'
+                                                                        : slot.available
+                                                                            ? 'bg-surface border-border hover:border-primary/50 text-text-primary'
+                                                                            : 'bg-surface-elevated border-border text-text-muted cursor-not-allowed opacity-50'
+                                                                    }`}
+                                                            >
+                                                                {slot.time}
+                                                            </button>
+                                                        ))
+                                                    }
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <Button
+                                        variant="primary"
+                                        className="w-full rounded-2xl py-4 h-auto text-base font-bold shadow-button"
+                                        disabled={!selectedSlot}
+                                        onClick={handleConfirmBooking}
+                                    >
+                                        Confirm Booking
+                                    </Button>
+                                </>
+                            )}
+
+                            {bookingStage === 'confirming' && (
+                                <div className="py-12 text-center">
+                                    <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-6" />
+                                    <h3 className="text-xl font-bold mb-2">Securing your slot...</h3>
+                                    <p className="text-text-secondary">We're confirming your appointment with {bookingDoctor.name}.</p>
+                                </div>
+                            )}
+
+                            {bookingStage === 'confirmed' && (
+                                <div className="text-center py-6">
+                                    <div className="w-20 h-20 bg-green-500/10 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-green-500/20">
+                                        <Check size={40} strokeWidth={3} />
+                                    </div>
+                                    <h3 className="text-2xl font-bold mb-1">Appointment Confirmed!</h3>
+                                    <p className="text-text-secondary mb-6">{bookingDoctor.name}, {bookingDoctor.hospital}</p>
+
+                                    <div className="bg-primary/5 border border-primary/10 rounded-2xl p-4 mb-8 text-left inline-block w-full max-w-sm">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-2">
+                                                <Calendar size={16} className="text-primary" />
+                                                <span className="text-sm font-medium">{selectedSlot?.date}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-right">
+                                                <Clock size={16} className="text-primary" />
+                                                <span className="text-sm font-medium">{selectedSlot?.time}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <MapPin size={16} className="text-primary shrink-0" />
+                                            <p className="text-xs text-text-secondary line-clamp-2">{bookingDoctor.address}</p>
+                                            <a
+                                                href={bookingDoctor.mapsUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="ml-auto p-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-all text-primary"
+                                            >
+                                                <ExternalLink size={16} />
+                                            </a>
                                         </div>
                                     </div>
 
                                     <div className="space-y-3">
-                                        <p className="text-sm font-bold text-text-primary uppercase tracking-wider">Available Slots</p>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {selectedDoctor.slots.map((slot, i) => (
-                                                <button
-                                                    key={i}
-                                                    disabled={!slot.available}
-                                                    onClick={() => setSelectedSlot(slot)}
-                                                    className={clsx(
-                                                        "p-3 rounded-xl border text-sm transition-all flex flex-col items-center gap-1",
-                                                        !slot.available ? "bg-surface-elevated border-border text-text-muted cursor-not-allowed" :
-                                                            selectedSlot === slot ? "bg-primary/5 border-primary text-primary ring-2 ring-primary/20" :
-                                                                "bg-surface border-border text-text-secondary hover:border-primary/50"
-                                                    )}
-                                                >
-                                                    <span className="font-bold">{slot.time}</span>
-                                                    <span className="text-[10px] opacity-70">{slot.date}</span>
-                                                </button>
-                                            ))}
+                                        <div className="flex items-center justify-center gap-2 text-primary font-medium">
+                                            <Loader2 size={16} className="animate-spin" />
+                                            <span>Your health summary is being prepared...</span>
                                         </div>
-                                    </div>
-
-                                    <div className="pt-6 space-y-4">
-                                        <Button
-                                            className="w-full"
-                                            disabled={!selectedSlot || isBookingLoading}
-                                            onClick={confirmBooking}
-                                        >
-                                            {isBookingLoading ? <Loader2 className="animate-spin" /> : "Confirm Booking"}
-                                        </Button>
-                                        <p className="text-[10px] text-center text-text-muted italic">
-                                            After booking, Ovira will prepare your health summary for {selectedDoctor.name.split(' ')[0]}
-                                        </p>
+                                        <p className="text-xs text-text-muted italic">Prepared from your Ovira tracking data (Last 12 months)</p>
                                     </div>
                                 </div>
-                            </div>
-                        )}
-                    </Card>
-                </div>
-            )}
-
-            {/* Upgrade Modal */}
-            {isUpgradeModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsUpgradeModalOpen(false)} />
-                    <Card className="relative w-full max-w-md p-8 text-center space-y-6 bg-surface animate-in fade-in slide-in-from-bottom-4">
-                        <div className="w-16 h-16 bg-accent/10 rounded-2xl flex items-center justify-center mx-auto text-accent">
-                            <Award size={32} />
+                            )}
                         </div>
-                        <div className="space-y-2">
-                            <h2 className="text-2xl font-bold text-text-primary text-balance text-left">Unlock Specialist Bookings with Ovira PRO</h2>
-                            <p className="text-text-secondary text-sm text-left">
-                                Get direct access to India's top women's health specialists and automatic health summary preparation.
-                            </p>
-                        </div>
-                        <div className="space-y-4 pt-4">
-                            <Button className="w-full bg-accent hover:bg-accent/90">Upgrade to PRO &mdash; Rs. 499/mo</Button>
-                            <Button variant="ghost" className="w-full" onClick={() => setIsUpgradeModalOpen(false)}>Not now</Button>
-                        </div>
-                    </Card>
+                    </div>
                 </div>
             )}
         </div>
+    );
+}
+
+function X({ size }: { size: number }) {
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+        </svg>
     );
 }

@@ -17,6 +17,7 @@ import {
 } from '@/lib/aws/dynamodb';
 import { reinitializeClients } from '@/lib/aws/config';
 import { UserProfile, OnboardingData } from '@/types';
+import { buildHealthContext } from '@/lib/buildHealthContext';
 
 interface AuthContextType {
     user: CognitoAuthUser | null;
@@ -95,7 +96,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 !profile.healthContextSummary
             ) {
                 try {
-                    const { buildHealthContext } = await import('@/lib/buildHealthContext');
                     const healthContextSummary = buildHealthContext(profile);
                     profile.healthContextSummary = healthContextSummary;
                     // Persist to DynamoDB in background (don't block profile load)
@@ -327,7 +327,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         // Generate health context summary for AI personalisation
-        const { buildHealthContext } = await import('@/lib/buildHealthContext');
         const healthContextSummary = buildHealthContext(profileSnapshot);
 
         const updates: Partial<UserProfile> = {

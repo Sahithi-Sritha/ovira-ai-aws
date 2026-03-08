@@ -58,7 +58,13 @@ export default function SignupPage() {
             const data = await response.json();
 
             if (!data.success) {
-                throw new Error(data.message || 'Signup failed');
+                const msg = data.message || '';
+                if (msg.toLowerCase().includes('already exists')) {
+                    setError('DUPLICATE_EMAIL');
+                    setLoading(false);
+                    return;
+                }
+                throw new Error(msg || 'Signup failed');
             }
 
             console.log('Signup response:', data);
@@ -66,13 +72,10 @@ export default function SignupPage() {
         } catch (err: any) {
             console.error('Signup error:', err);
             const errorMessage = err.message || err.error || '';
+            const lowerError = errorMessage.toLowerCase();
 
-<<<<<<< Updated upstream
-            // If user already exists, tell them to login instead
-=======
             // If user already exists, check if they need verification
->>>>>>> Stashed changes
-            if (errorMessage.includes('UsernameExistsException') || errorMessage.includes('already exists')) {
+            if (lowerError.includes('usernameexistsexception') || lowerError.includes('already exists')) {
                 setError('DUPLICATE_EMAIL');
             } else {
                 setError(getAmplifyErrorMessage(errorMessage));
@@ -102,16 +105,13 @@ export default function SignupPage() {
 
             console.log('Verification response:', data);
 
-<<<<<<< Updated upstream
             // Show "Email Verified!" success state first
             setSignupStep('complete');
 
             // Auto login after a brief delay so user sees the success message
             await new Promise(resolve => setTimeout(resolve, 2000));
 
-=======
             // Auto login after verification
->>>>>>> Stashed changes
             const loginResponse = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -147,10 +147,7 @@ export default function SignupPage() {
                 // Small delay to ensure state is set
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-<<<<<<< Updated upstream
-=======
                 setSignupStep('complete');
->>>>>>> Stashed changes
                 router.push('/onboarding');
             } else {
                 throw new Error('Login failed after verification');

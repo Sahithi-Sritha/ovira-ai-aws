@@ -508,3 +508,40 @@ export async function getSymptomLogsByMonth(
         throw error;
     }
 }
+// Document Operations
+export async function getUserDocuments(userId: string): Promise<any[]> {
+    const docClient = getDocClient();
+    try {
+        const command = new QueryCommand({
+            TableName: dynamoDBTables.documents,
+            KeyConditionExpression: 'userId = :userId',
+            ExpressionAttributeValues: {
+                ':userId': userId,
+            },
+        });
+        const response = await docClient.send(command);
+        return response.Items || [];
+    } catch (error) {
+        console.error('Error fetching user documents:', error);
+        return [];
+    }
+}
+
+export async function updateDocumentSummaryStatus(userId: string, docId: string, shouldInclude: boolean): Promise<void> {
+    const docClient = getDocClient();
+    try {
+        const command = new UpdateCommand({
+            TableName: dynamoDBTables.documents,
+            Key: { userId, docId },
+            UpdateExpression: 'SET shouldIncludeInSummary = :val, updatedAt = :now',
+            ExpressionAttributeValues: {
+                ':val': shouldInclude,
+                ':now': new Date().toISOString(),
+            },
+        });
+        await docClient.send(command);
+    } catch (error) {
+        console.error('Error updating document summary status:', error);
+        throw error;
+    }
+}

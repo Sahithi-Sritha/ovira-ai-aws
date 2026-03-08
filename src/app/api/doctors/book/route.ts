@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
-import { DEMO_DOCTORS } from '@/lib/constants/doctors';
-import { randomUUID } from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
+import { Appointment } from '@/types';
 
 const client = new DynamoDBClient({
     region: process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1',
@@ -11,69 +11,48 @@ const client = new DynamoDBClient({
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
     },
 });
-
 const docClient = DynamoDBDocumentClient.from(client);
+const APPOINTMENTS_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_APPOINTMENTS_TABLE || 'ovira-appointments';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
     try {
-        const { userId, doctorId, date, time } = await request.json();
+        const body = await request.json();
+        const { userId, doctorId, doctorName, hospital, address, mapsUrl, date, time } = body;
 
         if (!userId || !doctorId || !date || !time) {
             return NextResponse.json(
-                { success: false, error: 'Missing required fields' },
+                { success: false, error: 'Missing required booking fields' },
                 { status: 400 }
             );
         }
 
-        const doctor = DEMO_DOCTORS.find(d => d.doctorId === doctorId);
-        if (!doctor) {
-            return NextResponse.json(
-                { success: false, error: 'Doctor not found' },
-                { status: 404 }
-            );
-        }
-
-        const appointmentId = randomUUID();
-
-        const appointment = {
-            id: appointmentId,
+        const appointmentId = `appt_${uuidv4()}`;
+        const appointment: Appointment = {
+            appointmentId,
             userId,
             doctorId,
-            doctorName: doctor.name,
-            hospital: doctor.hospital,
-            city: doctor.city,
+            doctorName,
+            hospital,
+            address,
+            mapsUrl,
             date,
             time,
             status: 'confirmed',
-            summaryGenerated: false,
-            summarySent: false,
+            healthSummaryGenerated: false,
+            healthSummarySent: false,
             createdAt: new Date().toISOString(),
         };
 
-        const tableName = process.env.NEXT_PUBLIC_DYNAMODB_APPOINTMENTS_TABLE || 'ovira-appointments';
-
         await docClient.send(new PutCommand({
-            TableName: tableName,
+            TableName: APPOINTMENTS_TABLE,
             Item: appointment,
         }));
 
-        // Trigger background summary generation
-        const origin = new URL(request.url).origin;
-        fetch(`${origin}/api/appointments/generate-summary`, {
-            method: 'POST',
-            body: JSON.stringify({ appointmentId, userId }),
-            headers: { 'Content-Type': 'application/json' },
-        }).catch(err => console.error('Summary trigger background error:', err));
-
-        return NextResponse.json({
-            success: true,
-            appointmentId,
-            appointment,
-        });
+        return NextResponse.json({ success: true, appointmentId, message: 'Appointment booked successfully' });
     } catch (error: any) {
-        console.error('Booking API error:', error);
+        console.error('Error booking doctor:', error);
         return NextResponse.json(
-            { success: false, error: 'Failed to book appointment', details: error.message },
+            { success: false, error: error.message || 'Failed to book appointment' },
             { status: 500 }
         );
     }

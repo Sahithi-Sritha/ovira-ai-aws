@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { getUserSymptomLogs, getUserProfile } from '@/lib/aws/dynamodb';
+import { calculateHealthStats, analyzeHealthRiskFlags } from '@/lib/utils/healthAnalysis';
 import { invokeAI } from '@/lib/aws/bedrock';
-import { analyzeHealthPatterns } from '@/lib/utils/pattern-analysis';
-import { DEMO_DOCTORS } from '@/lib/constants/doctors';
-import { SymptomLog, UserProfile } from '@/types';
 
 const client = new DynamoDBClient({
     region: process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1',
@@ -13,172 +12,104 @@ const client = new DynamoDBClient({
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
     },
 });
-
 const docClient = DynamoDBDocumentClient.from(client);
+const APPOINTMENTS_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_APPOINTMENTS_TABLE || 'ovira-appointments';
+const DOCUMENTS_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_DOCUMENTS_TABLE || 'ovira-documents';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
     try {
-        const { appointmentId } = await request.json();
+        const { userId, appointmentId } = await request.json();
 
-        if (!appointmentId) {
-            return NextResponse.json({ success: false, error: 'Appointment ID is required' }, { status: 400 });
+        if (!userId || !appointmentId) {
+            return NextResponse.json({ success: false, error: 'Missing parameters' }, { status: 400 });
         }
 
-        const appointmentsTable = process.env.NEXT_PUBLIC_DYNAMODB_APPOINTMENTS_TABLE || 'ovira-appointments';
-        const usersTable = process.env.NEXT_PUBLIC_DYNAMODB_USERS_TABLE || 'ovira-users';
-        const symptomsTable = process.env.NEXT_PUBLIC_DYNAMODB_SYMPTOMS_TABLE || 'ovira-symptoms';
-        const documentsTable = process.env.DYNAMODB_DOCUMENTS_TABLE || 'ovira-documents';
-
-        // 1. Fetch Appointment
-        const appointmentRes = await docClient.send(new GetCommand({
-            TableName: appointmentsTable,
-            Key: { id: appointmentId }
-        }));
-
-        if (!appointmentRes.Item) {
-            return NextResponse.json({ success: false, error: 'Appointment not found' }, { status: 404 });
+        // 1. Fetch user data (12 months)
+        const profile = await getUserProfile(userId);
+        if (!profile) {
+            return NextResponse.json({ success: false, error: 'User profile not found' }, { status: 404 });
         }
 
-        const appointment = appointmentRes.Item;
-        const userId = appointment.userId;
-        const doctorId = appointment.doctorId;
+        const logs = await getUserSymptomLogs(userId, 365);
 
-        // 2. Fetch User Profile
-        const profileRes = await docClient.send(new ScanCommand({
-            TableName: usersTable,
-            FilterExpression: 'id = :id OR uid = :uid OR email = :email',
-            ExpressionAttributeValues: {
-                ':id': userId,
-                ':uid': userId,
-                ':email': userId,
-            },
-            Limit: 1,
+        // 1.5 Fetch Documents List
+        const docsRes = await docClient.send(new QueryCommand({
+            TableName: DOCUMENTS_TABLE,
+            KeyConditionExpression: 'userId = :uid',
+            ExpressionAttributeValues: { ':uid': userId }
         }));
-        const profile = (profileRes.Items?.[0] || {}) as UserProfile;
+        const documents = (docsRes.Items || []).filter(d => d.shouldIncludeInSummary !== false);
+        const documentSummary = documents.map(d => `${d.filename || d.fileName} (${(d.category || 'General').replace('_', ' ')})`).join(', ') || 'None';
 
-        // 3. Fetch Last 90 Days of Symptoms
-        const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-        const startDateStr = ninetyDaysAgo.toISOString().split('T')[0];
+        // 2. Perform pattern analysis
+        const stats = calculateHealthStats(logs, profile);
+        const riskFlags = analyzeHealthRiskFlags(logs, profile);
 
-        const symptomsRes = await docClient.send(new ScanCommand({
-            TableName: symptomsTable,
-            FilterExpression: 'userId = :userId AND #d >= :sd',
-            ExpressionAttributeNames: { '#d': 'date' },
-            ExpressionAttributeValues: {
-                ':userId': userId,
-                ':sd': startDateStr,
-            }
-        }));
-        const logs = (symptomsRes.Items || []) as SymptomLog[];
+        // 3. Prepare Bedrock Prompt
+        const prompt = `
+Generate a health summary for a patient to share with their gynaecologist.
+This is based on self-tracked data from the Ovira AI app.
 
-        // 4. Fetch Documents
-        let documentList = "None uploaded";
-        try {
-            const docsRes = await docClient.send(new ScanCommand({
-                TableName: documentsTable,
-                FilterExpression: 'userId = :userId',
-                ExpressionAttributeValues: { ':userId': userId }
-            }));
-            if (docsRes.Items && docsRes.Items.length > 0) {
-                documentList = docsRes.Items.map(d => d.fileName || d.name || 'Unnamed document').join(', ');
-            }
-        } catch (e) {
-            console.log('Documents table fetch failed or not configured, skipping docs');
-        }
+Patient: ${profile.displayName}, ${profile.ageRange}, ${profile.dietType} diet with ${profile.stapleGrain}-dominant staples
+Self-reported concerns: ${profile.conditions?.join(', ') || 'None'}
+Cycle: ${profile.averageCycleLength || 28} days average, ${profile.cycleRegularity || 'not specified'}
+Questions for this appointment: ${profile.personalGoal || 'General checkup'}
+Tracking: ${stats.totalLogs} entries over ${stats.monthsCovered} months
 
-        // 5. Compute Stats using analyzeHealthPatterns
-        const analysis = analyzeHealthPatterns(logs, profile);
-        const stats = analysis.cycleStats;
+Pattern data from tracking:
+- Average pain: ${stats.avgPain}/10
+- Heavy flow days in 6 months: ${stats.heavyFlowDays}
+- Most reported symptoms: ${stats.topSymptoms.join(', ') || 'None'}
+- Mood pattern before periods: ${stats.lutealMoodPattern}
+- Recent cycle lengths: ${stats.cycleLengths.join(', ') || 'N/A'}
+- Non-period days with pain above 5: ${stats.nonPeriodPainDays}
 
-        const avgPain = stats.avgPainScore;
-        const heavyFlowDays = stats.heavyFlowDays;
-        const nonPeriodPainDays = stats.nonPeriodPainDays;
-        const topSymptoms = stats.topSymptoms.length > 0 ? stats.topSymptoms.join(', ') : "None logged";
+Flagged concerns from pattern analysis:
+${riskFlags.map(f => `- [${f.severity.toUpperCase()}] ${f.type} pattern: ${f.description} (Flagged for evaluation)`).join('\n')}
 
-        const lutealMoodSummary = stats.lutealMoodScore < stats.follicularMoodScore - 1
-            ? "mood consistently lower in days before period"
-            : "mood stable";
+Documents being shared: ${documentSummary}
 
-        const cyclePattern = stats.cycleLengths.length > 0
-            ? `cycles range ${Math.min(...stats.cycleLengths)}-${Math.max(...stats.cycleLengths)} days, averaging ${Math.round(stats.cycleLengths.reduce((a, b) => a + b, 0) / stats.cycleLengths.length)} days`
-            : "insufficient data to determine cycle pattern";
+Generate these sections:
+1 - About the Patient
+2 - Cycle and Flow Patterns
+3 - Flagged Concerns
+4 - Diet and Lifestyle Context
+5 - Documents Shared
+6 - Questions for This Appointment
 
-        const doctor = DEMO_DOCTORS.find(d => d.doctorId === doctorId);
-        const doctorName = doctor?.name || "the specialist";
+LANGUAGE RULES — every line must follow:
+NEVER write: diagnose, diagnosis, you have [condition], at risk, treatment, cure, prescribe, medication, disorder, prescription
+ALWAYS write: pattern suggests, worth discussing, flagged for your evaluation, self-tracked observation, your patient may want to explore this with you
+End every concern with: flagged for your evaluation
 
-        // 6. Bedrock Prompt
-        const prompt = `Generate a pre-appointment health data summary for a gynaecologist.
-This summarises self-tracked data from the Ovira health app.
-The patient has explicitly consented to share this with their doctor.
-This is NOT a pattern concern. It is pattern data to help the appointment be productive.
+Final paragraph must say: This summary contains self-tracked data from the Ovira AI app. It is not a medical assessment. All observations are for your professional evaluation only.
+`;
 
-Patient: ${profile.displayName || 'User'}, ${profile.ageRange || 'Unknown age'}
-Health conditions noted by patient: ${profile.conditions?.join(', ') || 'None reported'}
-Diet: ${profile.dietType || 'Not specified'}, ${profile.stapleGrain || 'Not specified'}-dominant staples, iron-rich food intake: ${profile.ironRichFoodFrequency || 'Not specified'}
-Activity level: ${profile.activityLevel || 'Not specified'}
-Tracking period: ${startDateStr} — ${new Date().toISOString().split('T')[0]} (${logs.length} days logged)
-Personal goal for this appointment: ${profile.personalGoal || 'Routine checkup'}
+        const systemPrompt = "You are a medical data summarizer. You generate professional summaries for gynaecologists based on patient tracking data. You strictly follow non-diagnostic language rules.";
 
-Tracked patterns:
-- Cycle pattern: ${cyclePattern}
-- Average pain score when logged: ${avgPain}/10
-- Heavy flow days in period: ${heavyFlowDays}
-- Days with elevated pain outside period: ${nonPeriodPainDays}
-- Most frequently logged symptoms: ${topSymptoms}
-- Mood pattern: ${lutealMoodSummary}
-- Average sleep: ${stats.avgSleepHours} hours/night
-- Uploaded documents available: ${documentList}
+        // 4. Generate AI Summary
+        const aiResponse = await invokeAI(prompt, systemPrompt);
+        const summaryText = aiResponse.response;
 
-Generate a summary with these exact sections:
-1. Reason for Visit
-   (based on personal goal — what the patient wants to discuss today)
-
-2. Cycle & Flow Pattern
-   (state the data only — dates, lengths, flow levels — no interpretation)
-
-3. Symptom Patterns Ovira Noticed
-   (describe what the data shows — use 'Ovira noticed', 'the data shows',
-    'the patient logged' — not 'patient has' or 'indicates')
-
-4. Patterns Worth Discussing Today
-   (list 2-4 items from the data that the patient wants evaluated,
-    end each with '— worth discussing at this appointment')
-
-5. Patient's Questions for Dr. ${doctorName}
-   (generate 3-5 questions based on personal goal and flagged patterns,
-    phrased as questions the patient is bringing, not conclusions)
-
-6. Documents Available
-   (list uploaded documents or 'None — patient may have additional records')
-
-STRICT RULES:
-- NEVER say 'you have', 'patient has [condition]', 'this indicates', 'this means'
-- NEVER use: identify concerns about, pattern concern, disorder, disease, treatment, prescribe, medication
-- ALWAYS say: 'Ovira noticed a pattern of', 'the data shows', 'worth discussing'
-- Footer MUST include:
-  'This summary was generated from self-reported tracking data in the Ovira app.
-   All observations are pattern-based and are not a medical assessment.
-   Please verify all information directly with your patient.'`;
-
-        const aiResult = await invokeAI(prompt, "You are a clinical data summarizer for Ovira AI. You transform patient-tracked data into structured summaries for doctors. Always adhere to strict non-diagnostic language.");
-        const summaryText = aiResult.response;
-
-        // 7. Update Appointment
+        // 5. Update Appointment in DynamoDB
         await docClient.send(new UpdateCommand({
-            TableName: appointmentsTable,
-            Key: { id: appointmentId },
-            UpdateExpression: 'SET summaryGenerated = :g, summaryContent = :s, summaryGeneratedAt = :t',
+            TableName: APPOINTMENTS_TABLE,
+            Key: { userId, appointmentId },
+            UpdateExpression: 'SET healthSummaryGenerated = :gen, summaryText = :text, updatedAt = :now',
             ExpressionAttributeValues: {
-                ':g': true,
-                ':s': summaryText,
-                ':t': new Date().toISOString(),
-            },
+                ':gen': true,
+                ':text': summaryText.trim(),
+                ':now': new Date().toISOString(),
+            }
         }));
 
-        return NextResponse.json({ success: true, summaryText });
+        return NextResponse.json({
+            success: true,
+            summaryText: summaryText.trim()
+        });
+
     } catch (error: any) {
-        console.error('Summary generation API error:', error);
-        return NextResponse.json({ success: false, error: 'Failed to generate summary', details: error.message }, { status: 500 });
+        console.error('Error in generate-summary:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }

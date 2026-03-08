@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 
@@ -9,28 +9,28 @@ const client = new DynamoDBClient({
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
     },
 });
-
 const docClient = DynamoDBDocumentClient.from(client);
+const APPOINTMENTS_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_APPOINTMENTS_TABLE || 'ovira-appointments';
 
 export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    request: Request,
+    { params }: { params: { appointmentId: string } }
 ) {
     try {
-        const { id } = await params;
+        const { searchParams } = new URL(request.url);
+        const userId = searchParams.get('userId');
+        const { appointmentId } = params;
 
-        if (!id) {
+        if (!userId || !appointmentId) {
             return NextResponse.json(
-                { success: false, error: 'Appointment ID is required' },
+                { success: false, error: 'Missing userId or appointmentId' },
                 { status: 400 }
             );
         }
 
-        const tableName = process.env.NEXT_PUBLIC_DYNAMODB_APPOINTMENTS_TABLE || 'ovira-appointments';
-
         const response = await docClient.send(new GetCommand({
-            TableName: tableName,
-            Key: { id },
+            TableName: APPOINTMENTS_TABLE,
+            Key: { userId, appointmentId },
         }));
 
         if (!response.Item) {
@@ -42,14 +42,12 @@ export async function GET(
 
         return NextResponse.json({
             success: true,
-            status: response.Item.status,
-            summaryGenerated: response.Item.summaryGenerated,
-            summaryContent: response.Item.summaryContent,
+            appointment: response.Item
         });
     } catch (error: any) {
-        console.error('Status check API error:', error);
+        console.error('Error fetching appointment:', error);
         return NextResponse.json(
-            { success: false, error: 'Failed to fetch appointment status', details: error.message },
+            { success: false, error: error.message || 'Failed to fetch appointment' },
             { status: 500 }
         );
     }

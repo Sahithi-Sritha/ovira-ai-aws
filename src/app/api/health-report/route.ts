@@ -600,7 +600,7 @@ function generateFallbackReport(
     // Check for mood concerns
     if (stats.poorMoodDays >= stats.totalLogs * 0.5) {
         riskAssessment.push({
-            condition: 'Mood Disturbance/PMDD',
+            condition: 'Mood Pattern/PMDD',
             riskLevel: 'low',
             confidence: 'medium',
             indicators: ['Frequent low mood correlating with cycle'],

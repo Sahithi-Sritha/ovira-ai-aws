@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { SymptomLog } from '@/types';
+import { SymptomLog, Appointment } from '@/types';
 import {
     getPhaseColor,
     formatDate,
@@ -44,6 +44,9 @@ export default function DashboardPage() {
     const [bellOpen, setBellOpen] = useState(false);
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [dailyArticle, setDailyArticle] = useState<any>(null);
+    const [articleLoading, setArticleLoading] = useState(false);
+    const [upcomingAppt, setUpcomingAppt] = useState<Appointment | null>(null);
     const bellRef = useRef<HTMLDivElement>(null);
     const [welcomeToast, setWelcomeToast] = useState(false);
     const searchParams = useSearchParams();
@@ -135,6 +138,61 @@ export default function DashboardPage() {
 
         fetchRecentLogs();
     }, [user, userProfile]);
+
+    // Fetch daily health insight
+    useEffect(() => {
+        const fetchDailyArticle = async () => {
+            if (!user) return;
+
+            const today = new Date().toISOString().split('T')[0];
+            const cacheKey = `daily_article_${user.username}_${today}`;
+
+            // Check localStorage cache first
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                try {
+                    setDailyArticle(JSON.parse(cached));
+                    return;
+                } catch (e) {
+                    localStorage.removeItem(cacheKey);
+                }
+            }
+
+            setArticleLoading(true);
+            try {
+                const response = await fetch(`/api/articles?type=daily&userId=${user.username}`);
+                const data = await response.json();
+                if (data.success && data.article) {
+                    setDailyArticle(data.article);
+                    localStorage.setItem(cacheKey, JSON.stringify(data.article));
+                }
+            } catch (error) {
+                console.error('Error fetching daily article:', error);
+            } finally {
+                setArticleLoading(false);
+            }
+        };
+
+        fetchDailyArticle();
+    }, [user]);
+
+    // Fetch upcoming appointments
+    useEffect(() => {
+        const fetchUpcomingAppt = async () => {
+            if (!user) return;
+            try {
+                const response = await fetch(`/api/appointments?userId=${user.username}&upcoming=true`);
+                const data = await response.json();
+                if (data.success && data.appointments?.length > 0) {
+                    setUpcomingAppt(data.appointments[0]);
+                }
+            } catch (error) {
+                console.error('Error fetching appointments:', error);
+            }
+        };
+
+        fetchUpcomingAppt();
+    }, [user]);
 
     // Show loading state while auth is loading
     if (authLoading || loading) {
@@ -439,27 +497,89 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* AI Insight Card */}
-                <Card variant="elevated">
+                {/* Today's Health Insight Card */}
+                <Card variant="default">
                     <CardContent className="pt-6">
-                        <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center flex-shrink-0">
-                                <Sparkles className="w-5 h-5 text-secondary" />
+                        <div className="flex items-center gap-2 mb-4">
+                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                <Sparkles className="w-4 h-4 text-primary" />
                             </div>
-                            <div>
-                                <p className="font-medium mb-1">Health Insight</p>
-                                <p className="text-sm text-text-secondary">
-                                    You&apos;re in your {currentPhase.toLowerCase()} phase.
-                                    {currentPhase === 'Luteal' && ' This is a great time to focus on rest and self-care.'}
-                                    {currentPhase === 'Follicular' && ' Energy levels typically increase during this time.'}
-                                    {currentPhase === 'Ovulation' && ' You may notice increased energy and mood.'}
-                                    {currentPhase === 'Menstrual' && ' Remember to stay hydrated and rest when needed.'}
-                                    {currentPhase === 'Expected Period' && ' Your period may arrive soon. Take care of yourself.'}
-                                </p>
-                            </div>
+                            <h3 className="font-bold">Daily Health Insight</h3>
                         </div>
+
+                        {dailyArticle ? (
+                            <div className="space-y-3">
+                                <h4 className="font-bold text-text-primary leading-tight">
+                                    {dailyArticle.title}
+                                </h4>
+                                <p className="text-xs text-text-secondary line-clamp-3">
+                                    {dailyArticle.tagline || dailyArticle.body}
+                                </p>
+                                <Link
+                                    href={`/articles/${dailyArticle.id || 'daily'}`}
+                                    className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:gap-2 transition-all mt-2"
+                                >
+                                    Read more <ChevronRight size={12} />
+                                </Link>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <h4 className="font-bold text-text-primary leading-tight">
+                                    Nurture your {currentPhase.toLowerCase()} phase
+                                </h4>
+                                <p className="text-xs text-text-secondary leading-relaxed">
+                                    Focus on iron-rich foods like leafy greens and lean proteins during this time to support your levels.
+                                </p>
+                                <Link
+                                    href="/articles"
+                                    className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:gap-2 transition-all mt-2"
+                                >
+                                    View recommendations <ChevronRight size={12} />
+                                </Link>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
+
+                {/* Upcoming Appointment Card */}
+                {upcomingAppt && (
+                    <Card variant="default" className="md:col-span-2 lg:col-span-3 border-primary/20 bg-primary/5">
+                        <CardContent className="p-6">
+                            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                                        <Users className="w-6 h-6 text-primary" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-lg">Upcoming Health Consultation</h3>
+                                        <p className="text-text-secondary">
+                                            {upcomingAppt.doctorName}, {upcomingAppt.date} at {upcomingAppt.time}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 w-full md:w-auto">
+                                    {upcomingAppt.healthSummarySent ? (
+                                        <div className="flex items-center gap-2 text-green-600 font-bold bg-green-50 px-4 py-2 rounded-xl border border-green-200">
+                                            <Check size={18} /> Summary sent to {upcomingAppt.doctorName.split(' ')[1]}
+                                        </div>
+                                    ) : (
+                                        <Link href={`/appointments/${upcomingAppt.appointmentId}`} className="w-full md:w-auto">
+                                            <Button variant="primary" className="w-full rounded-xl shadow-button">
+                                                Send Health Summary
+                                            </Button>
+                                        </Link>
+                                    )}
+                                    <Link href={`/appointments/${upcomingAppt.appointmentId}`} className="shrink-0">
+                                        <Button variant="secondary" className="rounded-xl">
+                                            View Details
+                                        </Button>
+                                    </Link>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
 
             {/* Quick Actions */}
@@ -523,6 +643,6 @@ export default function DashboardPage() {
                     </div>
                 </CardContent>
             </Card>
-        </div>
+        </div >
     );
 }

@@ -50,7 +50,7 @@ const CLINICAL_SOURCES: Record<string, string> = {
 const FULL_CITATIONS = [
     {
         id: 'acog',
-        title: 'ACOG Clinical Practice Guideline No. 7 — Management of Premenstrual Disorders',
+        title: 'ACOG Clinical Practice Guideline No. 7 — Management of Premenstrual Patterns',
         year: '2023',
         source: 'American College of Obstetricians and Gynecologists',
     },
@@ -827,8 +827,8 @@ export default function HealthReportPage() {
                                             <button
                                                 onClick={() => toggleQuestion(i)}
                                                 className={`w-5 h-5 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-colors print:hidden ${checkedQuestions.has(i)
-                                                        ? 'bg-accent border-accent text-white'
-                                                        : 'border-gray-300 hover:border-accent'
+                                                    ? 'bg-accent border-accent text-white'
+                                                    : 'border-gray-300 hover:border-accent'
                                                     }`}
                                                 aria-label={`Toggle question ${i + 1}`}
                                             >

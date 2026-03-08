@@ -35,6 +35,11 @@ export interface UserProfile {
     // AI context
     healthContextSummary?: string;
     isPremium?: boolean;
+    // AI Preferences
+    aiPersonality?: 'warm' | 'informative' | 'detail';
+    aiResponseLength?: 'concise' | 'standard' | 'detailed';
+    aiModelPreference?: 'auto' | 'menstllama' | 'standard';
+    aiLanguage?: string;
 }
 
 // Symptom Log
@@ -81,6 +86,30 @@ export interface ChatMessage {
     timestamp: string; // ISO 8601 string
 }
 
+// Health Document
+export interface HealthDocument {
+    userId: string;
+    docId: string;
+    filename: string;
+    category: 'blood_test' | 'ultrasound' | 'prescription' | 'doctor_notes' | 'other';
+    uploadedAt: string; // ISO 8601 string
+    s3Key: string;
+    fileSize: number;
+}
+
+// Doctor
+export interface Doctor {
+    userId: string;
+    doctorId: string;
+    name: string;
+    specialty: 'Gynaecologist' | 'GP' | 'Endocrinologist' | 'Other';
+    hospital: string;
+    city: string;
+    phone?: string;
+    notes?: string;
+    isPreferred: boolean;
+}
+
 // Onboarding Data — covers all 6 steps
 export interface OnboardingData {
     // Step 1 — Welcome
@@ -115,19 +144,45 @@ export interface OnboardingData {
 
 // Appointment
 export interface Appointment {
-    id: string; // appointmentId
+    appointmentId: string;
     userId: string;
     doctorId: string;
     doctorName: string;
     hospital: string;
-    city: string;
+    address?: string;
+    mapsUrl?: string;
     date: string;
     time: string;
     status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
-    summaryGenerated: boolean;
-    summarySent: boolean;
-    summaryContent?: string;
+    healthSummaryGenerated: boolean;
+    healthSummarySent: boolean;
+    summaryText?: string;
     createdAt: string;
+}
+
+// Doctor Slot
+export interface DoctorSlot {
+    date: string;
+    time: string;
+    available: boolean;
+}
+
+// Full Doctor Profile (for discovery)
+export interface DoctorProfile {
+    doctorId: string;
+    name: string;
+    specialty: string;
+    hospital: string;
+    city: string;
+    experience: string;
+    languages: string[];
+    consultationFee: string;
+    rating: number;
+    reviews: number;
+    focusAreas: string[];
+    address: string;
+    mapsUrl: string;
+    slots: DoctorSlot[];
 }
 
 // Health Conditions List
@@ -135,7 +190,7 @@ export const HEALTH_CONDITIONS = [
     'PCOS',
     'Endometriosis',
     'Fibroids',
-    'Thyroid Disorder',
+    'Thyroid Condition',
     'Anemia',
     'Diabetes',
     'Hypertension',
