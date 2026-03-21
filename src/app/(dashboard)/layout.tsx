@@ -167,7 +167,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 <p className="text-sm font-medium truncate">
                                     {userProfile?.displayName || 'User'}
                                 </p>
-                                <p className="text-xs text-text-muted truncate">{user.email}</p>
+                                <p className="text-xs text-text-muted truncate">{user?.email || localStorage.getItem('userEmail') || ''}</p>
                             </div>
                         </div>
                         <button
