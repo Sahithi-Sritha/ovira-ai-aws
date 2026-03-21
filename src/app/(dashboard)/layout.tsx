@@ -43,10 +43,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         });
 
         if (!loading) {
-            if (!user) {
-                console.log('No user, redirecting to login');
+            // Check localStorage for tokens as fallback
+            const hasTokens = typeof window !== 'undefined' && 
+                localStorage.getItem('idToken') && 
+                localStorage.getItem('accessToken');
+            
+            console.log('Has tokens in localStorage:', hasTokens);
+
+            if (!user && !hasTokens) {
+                console.log('No user and no tokens, redirecting to login');
                 router.push('/login');
-            } else if (userProfile && userProfile.onboardingComplete === false && pathname !== '/onboarding') {
+            } else if (user && userProfile && userProfile.onboardingComplete === false && pathname !== '/onboarding') {
                 console.log('Onboarding incomplete, redirecting to onboarding');
                 router.push('/onboarding');
             }
@@ -64,7 +71,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         );
     }
 
-    if (!user) return null;
+    // Check for tokens in localStorage as fallback
+    const hasTokens = typeof window !== 'undefined' && 
+        localStorage.getItem('idToken') && 
+        localStorage.getItem('accessToken');
+
+    if (!user && !hasTokens) return null;
 
     const navigation = [
         { name: 'Dashboard', href: '/dashboard', icon: Home },

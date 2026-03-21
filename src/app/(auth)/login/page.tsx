@@ -59,6 +59,9 @@ export default function LoginPage() {
                 // Refresh user state
                 await refreshUser();
 
+                // Small delay to ensure auth context updates
+                await new Promise(resolve => setTimeout(resolve, 100));
+
                 // Let dashboard layout handle onboarding redirect
                 router.push('/dashboard');
             } else {
@@ -115,6 +118,9 @@ export default function LoginPage() {
 
                 // Refresh user state
                 await refreshUser();
+
+                // Small delay to ensure auth context updates
+                await new Promise(resolve => setTimeout(resolve, 100));
 
                 // Clear form data
                 setEmail('');
