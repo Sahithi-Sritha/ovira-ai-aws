@@ -20,6 +20,11 @@ export interface CalendarHeaderProps {
   onNextMonth: () => void;
   onJumpToMonth: (year: number, month: number) => void;
   canNavigateNext: boolean;
+  isDropdownOpen: boolean;
+  onHeaderClick: () => void;
+  onYearChange: (year: number) => void;
+  onMonthChange: (month: number) => void;
+  onDropdownClose: () => void;
 }
 
 export interface CalendarGridProps {
@@ -52,4 +57,25 @@ export interface CalendarDataState {
   symptomLogs: Map<string, SymptomLog>;
   isLoading: boolean;
   error: string | null;
+}
+
+export interface MonthYearDropdownProps {
+  year: number;
+  month: number;
+  isOpen: boolean;
+  onYearChange: (year: number) => void;
+  onMonthChange: (month: number) => void;
+  onClose: () => void;
+}
+
+export interface YearSelectorProps {
+  selectedYear: number;
+  onYearSelect: (year: number) => void;
+  minYear?: number;
+  maxYear?: number;
+}
+
+export interface MonthSelectorProps {
+  selectedMonth: number;
+  onMonthSelect: (month: number) => void;
 }

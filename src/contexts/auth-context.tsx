@@ -248,12 +248,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 throw new Error(data.error || 'Signin failed');
             }
 
-            // Store tokens and create user object
+            // Store tokens in localStorage
             const authResult = data.authenticationResult;
+            if (authResult) {
+                localStorage.setItem('idToken', authResult.IdToken || '');
+                localStorage.setItem('accessToken', authResult.AccessToken || '');
+                localStorage.setItem('refreshToken', authResult.RefreshToken || '');
+                localStorage.setItem('userEmail', email);
+                console.log('Tokens stored in localStorage');
+            }
+
+            // Create user object
             const authUser: CognitoAuthUser = {
                 username: email,
                 email: email,
-                attributes: {},
+                attributes: { email: email },
                 session: authResult as any,
             };
 
