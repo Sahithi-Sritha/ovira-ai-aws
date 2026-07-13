@@ -250,7 +250,7 @@ function detectPCOS(
     // ── (e) Mood swings in >50% of luteal phase logs ──
     const lutealLogs = sortedLogs.filter((log) => {
         const day = getCycleDay(log.date, periodStarts);
-        const cycleLen = profile.averageCycleLength || 28;
+        const cycleLen = profile.avgCycleLength || 28;
         return day >= cycleLen - 14 && day <= cycleLen;
     });
 
@@ -549,7 +549,7 @@ function detectPMDD(
 ): RiskFlag | null {
     let confidence = 0;
     const indicators: string[] = [];
-    const cycleLen = profile.averageCycleLength || 28;
+    const cycleLen = profile.avgCycleLength || 28;
 
     // Collect mood scores by phase
     const lutealScores: number[] = [];
@@ -751,7 +751,7 @@ export function analyzeHealthPatterns(
     ).length;
 
     // ── Mood scores by phase ─────────────────────────────────────────────
-    const cycleLen = profile.averageCycleLength || 28;
+    const cycleLen = profile.avgCycleLength || 28;
     const lutealMoodLogs = sortedLogs.filter((log) => {
         const day = getCycleDay(log.date, periodStarts);
         return day >= cycleLen - 14 && day <= cycleLen;

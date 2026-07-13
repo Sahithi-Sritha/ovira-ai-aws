@@ -3,6 +3,7 @@ import { chatWithAI, getFallbackResponse, sanitizeResponse } from '@/lib/aws/bed
 import { chatWithKB, type Citation } from '@/lib/aws/bedrock-kb';
 import { chatWithSLM, routeToSLM } from '@/lib/menstllama-client';
 import { withRateLimit } from '@/middleware/rateLimit';
+import { getAIContextString } from '@/lib/buildCompleteContext';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ function ensureConsultationReminder(text: string): string {
 
 async function handlePost(request: NextRequest) {
     try {
-        const { message, history, userContext } = await request.json();
+        const { message, history, userId } = await request.json();
 
         if (!message) {
             return NextResponse.json(
@@ -45,16 +46,16 @@ async function handlePost(request: NextRequest) {
             );
         }
 
-        // Build user context string early so it's available for all paths
+        // Build complete health context from all data sources
         let contextString = '';
-        if (userContext?.healthSummary) {
-            contextString = userContext.healthSummary;
-        } else {
-            if (userContext?.ageRange) {
-                contextString += `User age range: ${userContext.ageRange}`;
-            }
-            if (userContext?.conditions?.length > 0) {
-                contextString += `, Known conditions: ${userContext.conditions.join(', ')}`;
+        if (userId) {
+            try {
+                contextString = await getAIContextString(userId);
+                console.log('[Chat API] Built complete context for user:', userId);
+            } catch (err) {
+                console.error('[Chat API] Failed to build complete context:', err);
+                // Fall back to basic context if available
+                contextString = '';
             }
         }
 

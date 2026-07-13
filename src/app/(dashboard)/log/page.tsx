@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Slider } from '@/components/ui/Slider';
 import { MOOD_OPTIONS, FLOW_LEVELS, ENERGY_LEVELS, SYMPTOM_OPTIONS } from '@/types';
 import dynamic from 'next/dynamic';
 // TODO: Replace with AWS DynamoDB operations
@@ -167,22 +168,25 @@ export default function LogPage() {
 
     if (success) {
         return (
-            <div className="max-w-2xl mx-auto">
-                <Card variant="elevated" className="text-center py-12">
-                    <CardContent>
-                        <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-6 animate-slide-in-up">
-                            <Check className="w-10 h-10 text-success" />
-                        </div>
-                        <h2 className="text-2xl font-bold mb-2">Log Saved!</h2>
-                        <p className="text-text-secondary">Your symptoms have been recorded successfully.</p>
-                    </CardContent>
-                </Card>
+            <div className="-m-4 lg:-m-8 -mb-24 lg:-mb-8 p-4 lg:p-8 pb-24 lg:pb-8 min-h-[calc(100vh-64px)] lg:min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8F2FB' }}>
+                <div className="max-w-2xl mx-auto w-full">
+                    <Card variant="elevated" className="text-center py-12">
+                        <CardContent>
+                            <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-6 animate-slide-in-up">
+                                <Check className="w-10 h-10 text-success" />
+                            </div>
+                            <h2 className="text-2xl font-bold mb-2">Log Saved!</h2>
+                            <p className="text-text-secondary">Your symptoms have been recorded successfully.</p>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="max-w-2xl mx-auto">
+        <div className="-m-4 lg:-m-8 -mb-24 lg:-mb-8 p-4 lg:p-8 pb-24 lg:pb-8 min-h-[calc(100vh-64px)] lg:min-h-screen" style={{ backgroundColor: '#F8F2FB' }}>
+            <div className="max-w-2xl mx-auto">
             {/* Header */}
             <div className="flex items-center gap-4 mb-6">
                 <Link
@@ -283,17 +287,13 @@ export default function LogPage() {
                                 <span>No pain</span>
                                 <span>Severe</span>
                             </div>
-                            <input
-                                type="range"
-                                min="0"
-                                max="10"
-                                value={painLevel}
-                                onChange={(e) => setPainLevel(parseInt(e.target.value))}
-                                className="w-full h-2 rounded-full appearance-none cursor-pointer"
-                                style={{
-                                    background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${painLevel * 10
-                                        }%, hsl(var(--border)) ${painLevel * 10}%, hsl(var(--border)) 100%)`,
-                                }}
+                            <Slider
+                                min={0}
+                                max={10}
+                                step={1}
+                                value={[painLevel]}
+                                onValueChange={([value]) => setPainLevel(value)}
+                                className="w-full"
                             />
                             <div className="flex justify-center">
                                 <span className="text-3xl font-bold text-primary">{painLevel}</span>
@@ -447,6 +447,7 @@ export default function LogPage() {
                     userId={user.username}
                 />
             )}
+            </div>
         </div>
     );
 }

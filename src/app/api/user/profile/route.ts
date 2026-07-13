@@ -28,10 +28,10 @@ async function handleGet(request: NextRequest) {
       );
     }
 
-    // Use direct get with id as primary key
+    // Use direct get with userId as primary key
     const command = new GetCommand({
       TableName: TABLE_NAME,
-      Key: { id: userId },
+      Key: { userId },
     });
 
     const response = await docClient.send(command);
@@ -75,7 +75,7 @@ async function handlePost(request: NextRequest) {
     }
 
     const item = {
-      id: userId,
+      userId,
       uid: userId,
       ...profileData,
       createdAt: new Date().toISOString(),
@@ -120,10 +120,10 @@ async function handlePatch(request: NextRequest) {
       );
     }
 
-    // Use direct get with id as primary key
+    // Use direct get with userId as primary key
     const getCommand = new GetCommand({
       TableName: TABLE_NAME,
-      Key: { id: userId },
+      Key: { userId },
     });
 
     console.log('[PATCH /api/user/profile] Getting user with id:', userId);
@@ -156,8 +156,8 @@ async function handlePatch(request: NextRequest) {
       expressionAttributeValues[attrValue] = value;
     });
 
-    // Use id as the primary key (already verified it exists)
-    const updateKey = { id: userId };
+    // Use userId as the primary key (already verified it exists)
+    const updateKey = { userId };
 
     const updateCommand = new UpdateCommand({
       TableName: TABLE_NAME,

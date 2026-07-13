@@ -138,15 +138,12 @@ function buildContextOnlyResponse(question: string, context: string): KBResponse
         };
     }
 
-    // Build a natural, summarized response instead of dumping raw chunks
+    // Build a natural, summarized response
     const topChunk = blocks[0];
     const sentences = topChunk.split(/[.!?]+/).filter(s => s.trim().length > 20);
     const summary = sentences.slice(0, 3).join('. ').trim() + '.';
     
-    const response =
-        `Based on our women's health knowledge base: ${summary}\n\n` +
-        `${citations.length > 0 ? formatCitationFooter(citations) + '\n\n' : ''}` +
-        `Please consult a healthcare provider for personalised advice.`;
+    const response = summary + '\n\nPlease consult a healthcare provider for personalised advice.';
 
     return {
         response,

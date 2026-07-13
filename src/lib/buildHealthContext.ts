@@ -24,7 +24,7 @@ export function buildHealthContext(profile: UserProfile): string {
     parts.push(`Known health conditions: ${conditions}.`);
 
     // Cycle info
-    const cycleLen = profile.avgCycleLength || profile.averageCycleLength || 28;
+    const cycleLen = profile.avgCycleLength || 28;
     const regularity = profile.cycleRegularity || 'not specified';
     parts.push(
         `Her menstrual cycle averages ${cycleLen} days and is described as "${regularity}".`

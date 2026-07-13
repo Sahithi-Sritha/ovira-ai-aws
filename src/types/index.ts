@@ -11,13 +11,12 @@ export interface UserProfile {
     onboardingComplete: boolean;
     createdAt: string; // ISO 8601 string
     lastPeriodStart?: string; // ISO 8601 string
-    averageCycleLength: number;
     // About You (Step 2)
     activityLevel?: string;
     heightRange?: string;
     // Cycle History (Step 3)
     previousPeriodDates?: string[];
-    avgCycleLength?: number;
+    avgCycleLength: number;
     cycleRegularity?: string;
     // Diet & Lifestyle (Step 5)
     dietType?: string;

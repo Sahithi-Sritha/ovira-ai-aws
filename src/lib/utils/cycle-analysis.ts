@@ -1,7 +1,7 @@
 import { differenceInDays, addDays } from 'date-fns';
 
 export interface CycleInfo {
-    averageCycleLength: number;
+    avgCycleLength: number;
     lastPeriodStart: Date;
     nextPeriodDate: Date;
     cycleDay: number;
@@ -147,7 +147,7 @@ export function getCurrentCycleInfo(
     const hasSufficientData = computedCycleLength !== null;
 
     // Use computed data if available, otherwise fall back to profile/defaults
-    const averageCycleLength = computedCycleLength || profileCycleLength || 28;
+    const avgCycleLength = computedCycleLength || profileCycleLength || 28;
 
     // Most recent period start — prefer detected over profile
     const lastPeriodStart = periodStartDates.length > 0
@@ -168,19 +168,19 @@ export function getCurrentCycleInfo(
     const cycleDay = rawCycleDay;
 
     // Next expected period date
-    const nextPeriodDate = addDays(lastStart, averageCycleLength);
+    const nextPeriodDate = addDays(lastStart, avgCycleLength);
 
     // Days until next period — can be negative (overdue)
     const daysUntilNextPeriod = differenceInDays(nextPeriodDate, today);
 
     // Phase — use modular cycle day if way past due (wraps around)
-    const phaseDay = cycleDay <= averageCycleLength + 7
+    const phaseDay = cycleDay <= avgCycleLength + 7
         ? cycleDay
-        : ((cycleDay - 1) % averageCycleLength) + 1;
-    const currentPhase = getSmartCyclePhase(phaseDay, averageCycleLength);
+        : ((cycleDay - 1) % avgCycleLength) + 1;
+    const currentPhase = getSmartCyclePhase(phaseDay, avgCycleLength);
 
     return {
-        averageCycleLength,
+        avgCycleLength,
         lastPeriodStart: lastStart,
         nextPeriodDate,
         cycleDay,

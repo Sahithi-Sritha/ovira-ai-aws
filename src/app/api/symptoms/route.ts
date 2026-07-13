@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { withRateLimit } from '@/middleware/rateLimit';
+import { getUserSymptomLogs } from '@/lib/aws/dynamodb';
 
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION!,
@@ -81,30 +82,12 @@ async function handleGet(request: NextRequest) {
       );
     }
 
-    // Scan all items and filter by userId (no Limit on Scan — Limit restricts items *scanned*, not *returned*)
-    const command = new ScanCommand({
-      TableName: process.env.DYNAMODB_SYMPTOMS_TABLE!,
-      FilterExpression: 'userId = :userId',
-      ExpressionAttributeValues: {
-        ':userId': userId,
-      },
-    });
-
-    const response = await docClient.send(command);
-
-    // Sort by date descending (newest first), handling both YYYY-MM-DD and ISO formats
-    const sortedLogs = (response.Items || []).sort((a: any, b: any) => {
-      const aDate = a.date.includes('T') ? new Date(a.date).getTime() : new Date(a.date + 'T00:00:00').getTime();
-      const bDate = b.date.includes('T') ? new Date(b.date).getTime() : new Date(b.date + 'T00:00:00').getTime();
-      return bDate - aDate;
-    });
-
-    // Slice to the requested limit
-    const limitedLogs = sortedLogs.slice(0, limit);
+    // Use shared function from dynamodb.ts
+    const logs = await getUserSymptomLogs(userId, limit);
 
     return NextResponse.json({
       success: true,
-      logs: limitedLogs,
+      logs: logs,
     });
   } catch (error: any) {
     console.error('Error fetching symptom logs:', error);

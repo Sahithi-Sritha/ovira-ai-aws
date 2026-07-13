@@ -2,10 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
-    signUpUser,
-    signInUser,
     signOutUser,
-    getCurrentUser,
     resetPassword as cognitoResetPassword,
     getCognitoErrorMessage,
     CognitoAuthUser,
@@ -64,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     email: userId,
                     displayName: userId.split('@')[0],
                     onboardingComplete: false,
-                    averageCycleLength: 28,
+                    avgCycleLength: 28,
                     conditions: [],
                     language: 'en',
                     ageRange: '25-34' as const,
@@ -137,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 displayName: userId.split('@')[0],
                 onboardingComplete: false,
                 createdAt: new Date().toISOString(),
-                averageCycleLength: 28,
+                avgCycleLength: 28,
                 conditions: [],
                 language: 'en',
                 ageRange: '25-34',
@@ -323,12 +320,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             language: data.language,
             onboardingComplete: true,
             createdAt: userProfile?.createdAt || new Date().toISOString(),
-            averageCycleLength: data.periodDuration ? Math.round(28) : 28,
+            avgCycleLength: data.periodDuration || 28,
             activityLevel: data.activityLevel,
             heightRange: data.heightRange,
             lastPeriodStart: data.lastPeriodStart,
             previousPeriodDates: data.previousPeriodDates,
-            avgCycleLength: data.periodDuration,
             cycleRegularity: data.cycleRegularity,
             dietType: data.dietType,
             stapleGrain: data.stapleGrain,
@@ -385,7 +381,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         console.log('Profile updated via API with health context');
 
-        setUserProfile((prev) => {
+        setUserProfile((prev: UserProfile | null) => {
             const updated = prev ? { ...prev, ...updates } : null;
             console.log('Updated userProfile state:', updated);
             return updated;
@@ -408,7 +404,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             throw new Error(data.message || 'Failed to update profile');
         }
 
-        setUserProfile((prev) => prev ? { ...prev, ...updates } : null);
+        setUserProfile((prev: UserProfile | null) => prev ? { ...prev, ...updates } : null);
     };
 
     // Refresh user profile

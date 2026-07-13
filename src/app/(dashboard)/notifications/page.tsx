@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { AppleSwitch } from '@/components/unlumen-ui/apple-switch';
+import { Slider } from '@/components/ui/Slider';
 import {
     ArrowLeft, Bell, BellOff, Clock, Droplets, Pill, Calendar,
     Trash2, Plus, Check, X, AlertCircle
@@ -204,7 +206,9 @@ export default function NotificationsPage() {
                                         <p className="text-xs text-text-muted">Get alerts even when app is closed</p>
                                     </div>
                                 </div>
-                                <ToggleSwitch
+                                <AppleSwitch
+                                    size="sm"
+                                    tone="accent"
                                     checked={settings.pushEnabled}
                                     onChange={() => {
                                         if (!settings.pushEnabled) {
@@ -231,7 +235,9 @@ export default function NotificationsPage() {
                                         <CardDescription>Alert before your predicted period</CardDescription>
                                     </div>
                                 </div>
-                                <ToggleSwitch
+                                <AppleSwitch
+                                    size="sm"
+                                    tone="accent"
                                     checked={settings.periodReminder.enabled}
                                     onChange={() => updateSettings({
                                         periodReminder: { ...settings.periodReminder, enabled: !settings.periodReminder.enabled }
@@ -243,18 +249,15 @@ export default function NotificationsPage() {
                             <CardContent>
                                 <div className="flex items-center gap-4">
                                     <label className="text-sm text-text-secondary">Days before:</label>
-                                    <input
-                                        type="range"
-                                        min="1"
-                                        max="7"
-                                        value={settings.periodReminder.daysBefore}
-                                        onChange={e => updateSettings({
-                                            periodReminder: { ...settings.periodReminder, daysBefore: parseInt(e.target.value) }
+                                    <Slider
+                                        min={1}
+                                        max={7}
+                                        step={1}
+                                        value={[settings.periodReminder.daysBefore]}
+                                        onValueChange={([value]) => updateSettings({
+                                            periodReminder: { ...settings.periodReminder, daysBefore: value }
                                         })}
-                                        className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
-                                        style={{
-                                            background: `linear-gradient(to right, hsl(var(--accent)) 0%, hsl(var(--accent)) ${((settings.periodReminder.daysBefore - 1) / 6) * 100}%, hsl(var(--border)) ${((settings.periodReminder.daysBefore - 1) / 6) * 100}%, hsl(var(--border)) 100%)`,
-                                        }}
+                                        className="flex-1"
                                     />
                                     <span className="text-sm font-bold text-accent w-16 text-center">
                                         {settings.periodReminder.daysBefore} day{settings.periodReminder.daysBefore > 1 ? 's' : ''}
@@ -277,7 +280,9 @@ export default function NotificationsPage() {
                                         <CardDescription>Remember to track your symptoms</CardDescription>
                                     </div>
                                 </div>
-                                <ToggleSwitch
+                                <AppleSwitch
+                                    size="sm"
+                                    tone="accent"
                                     checked={settings.dailyLog.enabled}
                                     onChange={() => updateSettings({
                                         dailyLog: { ...settings.dailyLog, enabled: !settings.dailyLog.enabled }
@@ -320,7 +325,9 @@ export default function NotificationsPage() {
                         <CardContent className="space-y-3">
                             {settings.medications.map(med => (
                                 <div key={med.id} className="flex items-center gap-3 p-3 rounded-xl bg-surface-elevated">
-                                    <ToggleSwitch
+                                    <AppleSwitch
+                                        size="sm"
+                                        tone="accent"
                                         checked={med.enabled}
                                         onChange={() => toggleMedication(med.id)}
                                     />
@@ -381,7 +388,9 @@ export default function NotificationsPage() {
                                         <CardDescription>Stay hydrated during your period</CardDescription>
                                     </div>
                                 </div>
-                                <ToggleSwitch
+                                <AppleSwitch
+                                    size="sm"
+                                    tone="accent"
                                     checked={settings.hydration.enabled}
                                     onChange={() => updateSettings({
                                         hydration: { ...settings.hydration, enabled: !settings.hydration.enabled }
@@ -452,19 +461,5 @@ function NotificationItem({ notif, onDismiss }: { notif: AppNotification; onDism
                 </button>
             )}
         </div>
-    );
-}
-
-// Toggle switch component
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-    return (
-        <button
-            onClick={onChange}
-            className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-border'
-                }`}
-        >
-            <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow-sm ${checked ? 'translate-x-5' : 'translate-x-0'
-                }`} />
-        </button>
     );
 }

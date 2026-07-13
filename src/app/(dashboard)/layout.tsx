@@ -10,6 +10,7 @@ import {
     loadSettings, saveSettings, loadNotifications, getUnreadCount,
     checkAndGenerateNotifications
 } from '@/lib/utils/notifications';
+import { Dock } from '@/components/unlumen-ui/dock';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { user, userProfile, loading, logout } = useAuth();
@@ -208,7 +209,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </header>
 
                 {/* Page content */}
-                <main className="p-4 lg:p-8">{children}</main>
+                <main className="p-4 lg:p-8 pb-24 lg:pb-8">{children}</main>
+                
+                {/* Mobile Dock Navigation */}
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 lg:hidden w-[95%] max-w-sm flex justify-center overflow-x-auto pb-2 custom-scrollbar">
+                    <Dock 
+                        items={navigation.map(nav => ({
+                            icon: <nav.icon size={20} />,
+                            label: nav.name,
+                            href: nav.href
+                        }))}
+                        iconSize={40}
+                    />
+                </div>
             </div>
         </div>
     );

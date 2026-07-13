@@ -30,6 +30,7 @@ export default function ChatPage() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [healthSummary, setHealthSummary] = useState('');
+    const [contextTags, setContextTags] = useState<string[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -39,6 +40,50 @@ export default function ChatPage() {
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // Fetch complete health context for display
+    useEffect(() => {
+        const fetchContext = async () => {
+            if (!user) return;
+            
+            try {
+                const response = await fetch(`/api/context?userId=${user.username}`);
+                const data = await response.json();
+                
+                if (data.success && data.context) {
+                    const tags: string[] = [];
+                    
+                    // Add conditions
+                    if (data.context.profile.conditions?.length > 0) {
+                        tags.push(...data.context.profile.conditions);
+                    }
+                    
+                    // Add diet
+                    if (data.context.profile.diet) {
+                        tags.push(data.context.profile.diet);
+                    }
+                    
+                    // Add cycle length
+                    if (data.context.profile.cycleLength) {
+                        tags.push(`Cycle: ${data.context.profile.cycleLength} days`);
+                    }
+                    
+                    // Add documents
+                    if (data.context.documents?.length > 0) {
+                        data.context.documents.forEach((doc: any) => {
+                            tags.push(`📄 ${doc.category}`);
+                        });
+                    }
+                    
+                    setContextTags(tags);
+                }
+            } catch (err) {
+                console.error('Failed to fetch context:', err);
+            }
+        };
+        
+        fetchContext();
+    }, [user]);
 
     // Fetch user's health data and build a summary for the AI
     useEffect(() => {
@@ -141,11 +186,7 @@ export default function ChatPage() {
                 body: JSON.stringify({
                     message: content,
                     history: messages.slice(-10),
-                    userContext: {
-                        ageRange: userProfile?.ageRange,
-                        conditions: userProfile?.conditions,
-                        healthSummary: healthSummary,
-                    },
+                    userId: user?.username,
                 }),
             });
 
@@ -193,14 +234,31 @@ export default function ChatPage() {
                 >
                     <ArrowLeft size={24} />
                 </Link>
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                        <Sparkles className="w-5 h-5 text-white" />
+                <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                            <Sparkles className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold">Chat with Ovira AI</h1>
+                            <p className="text-sm text-text-secondary">Your compassionate health companion</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-xl font-bold">Chat with Ovira AI</h1>
-                        <p className="text-sm text-text-secondary">Your compassionate health companion</p>
-                    </div>
+                    
+                    {/* Context Tags */}
+                    {contextTags.length > 0 && (
+                        <div className="flex flex-wrap gap-2 ml-[52px]">
+                            <span className="text-xs font-medium text-text-muted">AI Context:</span>
+                            {contextTags.map((tag, i) => (
+                                <span
+                                    key={i}
+                                    className="px-2 py-1 text-xs bg-success/10 text-success rounded-full border border-success/20"
+                                >
+                                    ✓ {tag}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 

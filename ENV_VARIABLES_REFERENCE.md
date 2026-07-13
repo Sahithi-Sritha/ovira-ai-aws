@@ -11,12 +11,12 @@ Quick reference guide for all environment variables used in Ovira AI.
 | DynamoDB | 8 | 0 | 8 |
 | Bedrock | 3 | 2 | 5 |
 | S3 | 2 | 2 | 4 |
-| MenstLLaMA | 0 | 1 | 1 |
+| MenstLLaMA | 0 | 2 | 2 |
 | Redis | 0 | 2 | 2 |
 | SES | 0 | 2 | 2 |
 | Next.js | 2 | 0 | 2 |
 | App | 1 | 1 | 2 |
-| **TOTAL** | **22** | **12** | **34** |
+| **TOTAL** | **22** | **13** | **35** |
 
 ---
 
@@ -98,11 +98,12 @@ S3_DOCUMENTS_BUCKET=ovira-documents
 S3_KNOWLEDGE_BASE_BUCKET=ovira-knowledge-base
 ```
 
-### MenstLLaMA (1)
+### MenstLLaMA (2)
 ```bash
 MENSTLLAMA_EC2_URL=http://your-ec2-public-ip:8080
+SLM_API_KEY=your_generated_api_key_here
 ```
-*Without this: Domain queries fall back to Bedrock*
+*Without these: Domain queries fall back to Bedrock*
 
 ### Upstash Redis (2)
 ```bash
@@ -142,6 +143,7 @@ NODE_ENV=development
 - `BEDROCK_REGION`
 - `BEDROCK_CHATBOT_KB_ID` (optional)
 - `MENSTLLAMA_EC2_URL` (optional)
+- `SLM_API_KEY` (optional)
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 
@@ -213,6 +215,7 @@ Examples:
 | `BEDROCK_*_KB_ID` | Bedrock Console → Knowledge bases |
 | `S3_*_BUCKET` | S3 Console → Buckets (or create new) |
 | `MENSTLLAMA_EC2_URL` | EC2 Console → Instance → Public IPv4 DNS |
+| `SLM_API_KEY` | Generated during EC2 deployment (see deployment script output) |
 | `UPSTASH_REDIS_REST_URL` | Upstash Console → Database → REST API |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Console → Database → REST API |
 | `NEXTAUTH_SECRET` | Generate: `openssl rand -base64 32` |

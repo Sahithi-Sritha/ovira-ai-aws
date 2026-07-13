@@ -1,7 +1,7 @@
 // Server-side only - for use in API routes
 // DO NOT import this file in client components
 
-import { PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { UserProfile, SymptomLog, HealthReport, ChatMessage } from '@/types';
@@ -43,20 +43,15 @@ export async function createUserProfile(profile: Partial<UserProfile>): Promise<
     try {
         console.log('Creating user profile:', profile);
 
-        // Ensure we have the required key fields for different possible table structures
         const item = {
             ...profile,
+            userId: profile.userId || profile.uid || profile.id,
             createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
         };
 
-        // Add id field if it doesn't exist (some tables might use id as primary key)
-        if (!item.id && (item.uid || item.email)) {
-            item.id = item.uid || item.email;
-        }
-
-        // Ensure uid exists if id exists
-        if (!item.uid && item.id) {
-            item.uid = item.id;
+        if (!item.userId) {
+            throw new Error('userId is required to create a user profile');
         }
 
         console.log('Final item to create:', item);
@@ -80,30 +75,55 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     console.log(`Getting user profile for userId: ${userId}`);
 
     try {
-        // Use scan approach to find user by id, uid, or email
-        const scanCommand = new ScanCommand({
+        // Direct GetCommand using userId as primary key
+        const command = new GetCommand({
             TableName: dynamoDBTables.users,
-            FilterExpression: 'id = :id OR uid = :uid OR email = :email',
+            Key: { userId },
+        });
+
+        const response = await docClient.send(command);
+        
+        if (response.Item) {
+            console.log('User profile found');
+            return response.Item as UserProfile;
+        }
+
+        console.log('No user profile found');
+        return null;
+    } catch (error: any) {
+        console.error('Error getting user profile:', error);
+        return null;
+    }
+}
+
+export async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
+    const docClient = getDocClient();
+
+    console.log(`Getting user profile by email: ${email}`);
+
+    try {
+        // Use EmailIndex GSI for email lookups
+        const command = new QueryCommand({
+            TableName: dynamoDBTables.users,
+            IndexName: 'EmailIndex',
+            KeyConditionExpression: 'email = :email',
             ExpressionAttributeValues: {
-                ':id': userId,
-                ':uid': userId,
-                ':email': userId,
+                ':email': email,
             },
             Limit: 1,
         });
 
-        const scanResponse = await docClient.send(scanCommand);
-        const profile = scanResponse.Items?.[0] as UserProfile;
-
-        if (profile) {
-            console.log('User profile found via scan');
-            return profile;
-        } else {
-            console.log('No user profile found');
-            return null;
+        const response = await docClient.send(command);
+        
+        if (response.Items && response.Items.length > 0) {
+            console.log('User profile found by email');
+            return response.Items[0] as UserProfile;
         }
+
+        console.log('No user profile found for email');
+        return null;
     } catch (error: any) {
-        console.error('Error getting user profile via scan:', error);
+        console.error('Error getting user profile by email:', error);
         return null;
     }
 }
@@ -113,33 +133,6 @@ export async function updateUserProfile(userId: string, updates: Partial<UserPro
 
     try {
         console.log(`Updating user profile for userId: ${userId}`);
-
-        // First, find the user using scan to get the correct key
-        const scanCommand = new ScanCommand({
-            TableName: dynamoDBTables.users,
-            FilterExpression: 'id = :id OR uid = :uid OR email = :email',
-            ExpressionAttributeValues: {
-                ':id': userId,
-                ':uid': userId,
-                ':email': userId,
-            },
-            Limit: 1,
-        });
-
-        const scanResponse = await docClient.send(scanCommand);
-        const existingUser = scanResponse.Items?.[0];
-
-        if (!existingUser) {
-            console.log('User not found for update, creating new profile');
-            // Create new profile if user doesn't exist
-            await createUserProfile({
-                id: userId,
-                uid: userId,
-                email: userId,
-                ...updates,
-            });
-            return;
-        }
 
         // Build update expression
         const updateExpressions: string[] = [];
@@ -154,19 +147,14 @@ export async function updateUserProfile(userId: string, updates: Partial<UserPro
             expressionAttributeValues[attrValue] = value;
         });
 
-        // Use the key from the existing user (try id first, then uid, then email)
-        let updateKey;
-        if (existingUser.id) {
-            updateKey = { id: existingUser.id };
-        } else if (existingUser.uid) {
-            updateKey = { uid: existingUser.uid };
-        } else {
-            updateKey = { email: existingUser.email };
-        }
+        // Add updatedAt timestamp
+        updateExpressions.push('#updatedAt = :updatedAt');
+        expressionAttributeNames['#updatedAt'] = 'updatedAt';
+        expressionAttributeValues[':updatedAt'] = new Date().toISOString();
 
         const updateCommand = new UpdateCommand({
             TableName: dynamoDBTables.users,
-            Key: updateKey,
+            Key: { userId },
             UpdateExpression: `SET ${updateExpressions.join(', ')}`,
             ExpressionAttributeNames: expressionAttributeNames,
             ExpressionAttributeValues: expressionAttributeValues,
@@ -176,20 +164,7 @@ export async function updateUserProfile(userId: string, updates: Partial<UserPro
         console.log('User profile updated successfully');
     } catch (error: any) {
         console.error('Error updating user profile:', error);
-
-        // If update fails, try to create a new profile
-        try {
-            console.log('Update failed, attempting to create new profile');
-            await createUserProfile({
-                id: userId,
-                uid: userId,
-                email: userId,
-                ...updates,
-            });
-        } catch (createError) {
-            console.error('Failed to create profile as fallback:', createError);
-            throw createError;
-        }
+        throw error;
     }
 }
 
@@ -197,7 +172,7 @@ export async function deleteUserProfile(userId: string): Promise<void> {
     const docClient = getDocClient();
     const command = new DeleteCommand({
         TableName: dynamoDBTables.users,
-        Key: { uid: userId },
+        Key: { userId },
     });
     await docClient.send(command);
 }
@@ -226,11 +201,11 @@ export async function createSymptomLog(log: Omit<SymptomLog, 'id'>): Promise<str
     return id;
 }
 
-export async function getSymptomLog(userId: string, logId: string): Promise<SymptomLog | null> {
+export async function getSymptomLog(userId: string, date: string): Promise<SymptomLog | null> {
     const docClient = getDocClient();
     const command = new GetCommand({
         TableName: dynamoDBTables.symptoms,
-        Key: { userId, timestamp: logId },
+        Key: { userId, date },
     });
     const response = await docClient.send(command);
     return (response.Item as SymptomLog) || null;
@@ -240,7 +215,7 @@ export async function getUserSymptomLogs(userId: string, limit: number = 100): P
     const docClient = getDocClient();
 
     try {
-        // First try the expected structure with Query
+        // Query using userId partition key
         const command = new QueryCommand({
             TableName: dynamoDBTables.symptoms,
             KeyConditionExpression: 'userId = :userId',
@@ -254,39 +229,14 @@ export async function getUserSymptomLogs(userId: string, limit: number = 100): P
         const response = await docClient.send(command);
         return (response.Items as SymptomLog[]) || [];
     } catch (error: any) {
-        console.error('Query failed, trying scan approach:', error);
-
-        // Fallback to scan if query fails (table structure might be different)
-        try {
-            const { ScanCommand } = await import('@aws-sdk/lib-dynamodb');
-            const scanCommand = new ScanCommand({
-                TableName: dynamoDBTables.symptoms,
-                FilterExpression: 'userId = :userId',
-                ExpressionAttributeValues: {
-                    ':userId': userId,
-                },
-                Limit: limit,
-            });
-
-            const scanResponse = await docClient.send(scanCommand);
-            const logs = (scanResponse.Items as SymptomLog[]) || [];
-
-            // Sort by timestamp descending (newest first)
-            return logs.sort((a, b) => {
-                const aTime = a.createdAt ? new Date(a.createdAt).getTime() : new Date(a.date).getTime();
-                const bTime = b.createdAt ? new Date(b.createdAt).getTime() : new Date(b.date).getTime();
-                return bTime - aTime;
-            });
-        } catch (scanError) {
-            console.error('Scan also failed:', scanError);
-            return [];
-        }
+        console.error('Error querying symptom logs:', error);
+        throw error;
     }
 }
 
 export async function updateSymptomLog(
     userId: string,
-    logId: string,
+    date: string,
     updates: Partial<SymptomLog>
 ): Promise<void> {
     const docClient = getDocClient();
@@ -310,7 +260,7 @@ export async function updateSymptomLog(
 
     const command = new UpdateCommand({
         TableName: dynamoDBTables.symptoms,
-        Key: { userId, timestamp: logId },
+        Key: { userId, date },
         UpdateExpression: `SET ${updateExpressions.join(', ')}`,
         ExpressionAttributeNames: expressionAttributeNames,
         ExpressionAttributeValues: expressionAttributeValues,
@@ -319,11 +269,11 @@ export async function updateSymptomLog(
     await docClient.send(command);
 }
 
-export async function deleteSymptomLog(userId: string, logId: string): Promise<void> {
+export async function deleteSymptomLog(userId: string, date: string): Promise<void> {
     const docClient = getDocClient();
     const command = new DeleteCommand({
         TableName: dynamoDBTables.symptoms,
-        Key: { userId, timestamp: logId },
+        Key: { userId, date },
     });
     await docClient.send(command);
 }
@@ -443,41 +393,25 @@ export async function getSymptomLogsByDateRange(
     try {
         console.log(`Fetching symptom logs for user ${userId} from ${startDate} to ${endDate}`);
 
-        // Use scan approach to match the API structure
-        const { ScanCommand } = await import('@aws-sdk/lib-dynamodb');
-        const command = new ScanCommand({
+        // Use Query with KeyConditionExpression for efficient date range lookup
+        const command = new QueryCommand({
             TableName: dynamoDBTables.symptoms,
-            FilterExpression: 'userId = :userId',
+            KeyConditionExpression: 'userId = :userId AND #date BETWEEN :startDate AND :endDate',
+            ExpressionAttributeNames: {
+                '#date': 'date',
+            },
             ExpressionAttributeValues: {
                 ':userId': userId,
+                ':startDate': startDate,
+                ':endDate': endDate,
             },
         });
 
         const response = await docClient.send(command);
-        const allLogs = (response.Items as SymptomLog[]) || [];
+        const logs = (response.Items as SymptomLog[]) || [];
 
-        // Filter by date range on the client side
-        const filteredLogs = allLogs.filter(log => {
-            // Handle timezone issues by comparing dates properly
-            let logDate: string;
-
-            if (log.date.includes('T')) {
-                // If it's an ISO string, parse it and format as local date
-                const date = new Date(log.date);
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                logDate = `${year}-${month}-${day}`;
-            } else {
-                // If it's already in YYYY-MM-DD format, use as is
-                logDate = log.date;
-            }
-
-            return logDate >= startDate && logDate <= endDate;
-        });
-
-        console.log(`Found ${filteredLogs.length} symptom logs for date range ${startDate} to ${endDate}`);
-        return filteredLogs;
+        console.log(`Found ${logs.length} symptom logs for date range ${startDate} to ${endDate}`);
+        return logs;
     } catch (error) {
         console.error('Error fetching symptom logs by date range:', error);
         throw error;
@@ -492,20 +426,8 @@ export async function getSymptomLogsByMonth(
     try {
         console.log(`Fetching symptom logs for user ${userId}, month ${year}-${month + 1}`);
 
-        // Call the API endpoint instead of accessing DynamoDB directly
-        const response = await fetch(`/api/symptoms?userId=${encodeURIComponent(userId)}&limit=100`);
-
-        if (!response.ok) {
-            throw new Error(`API request failed: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        if (!data.success) {
-            throw new Error(data.message || 'Failed to fetch symptom logs');
-        }
-
-        const allLogs = data.logs as SymptomLog[];
+        // Call shared function directly instead of using fetch()
+        const allLogs = await getUserSymptomLogs(userId, 100);
 
         // Calculate start and end dates for the month
         const startDate = new Date(year, month, 1);

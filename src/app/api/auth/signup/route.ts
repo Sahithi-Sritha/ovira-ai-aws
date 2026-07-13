@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
             displayName: displayName,
             onboardingComplete: false,
             createdAt: new Date().toISOString(),
-            averageCycleLength: 28,
+            avgCycleLength: 28,
             conditions: [],
             language: 'en',
             ageRange: '25-34',

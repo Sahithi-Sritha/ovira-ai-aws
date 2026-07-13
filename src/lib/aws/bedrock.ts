@@ -55,22 +55,24 @@ function containsProhibitedTerms(text: string): boolean {
 
 // Sanitize AI response to ensure non-diagnostic output
 export function sanitizeResponse(text: string): string {
-    let sanitized = text;
-
-    // Replace diagnostic language with decision-support language
-    sanitized = sanitized.replace(/\b(diagnos[ei]s?|diagnose[ds]?)\b/gi, 'pattern observation');
-    sanitized = sanitized.replace(/\b(treatment|treat)\b/gi, 'management approach');
-    sanitized = sanitized.replace(/\b(cure|cured)\b/gi, 'improvement');
-    sanitized = sanitized.replace(/\b(prescribe[ds]?|prescription)\b/gi, 'recommendation');
-    sanitized = sanitized.replace(/\b(disease|disorder|illness)\b/gi, 'condition');
-    sanitized = sanitized.replace(/\b(medication|medicine|drug)\b/gi, 'option');
-
-    // Add decision-support disclaimer if not present
-    if (!sanitized.includes('consult') && !sanitized.includes('healthcare provider')) {
-        sanitized += '\n\nRemember: This is decision-support information only. Please consult with a healthcare provider for personalized medical advice.';
+    // Check if response contains prohibited medical terms
+    const containsProhibited = containsProhibitedTerms(text);
+    
+    if (containsProhibited) {
+        // Log for human review
+        console.warn('[MEDICAL TERM FLAGGED] Response contains prohibited medical terms and requires human review:', {
+            timestamp: new Date().toISOString(),
+            flaggedTerms: PROHIBITED_MEDICAL_TERMS.filter(term => 
+                text.toLowerCase().includes(term)
+            ),
+            responsePreview: text.substring(0, 200) + '...',
+        });
     }
 
-    return sanitized;
+    // Add disclaimer footer to all responses
+    const disclaimer = '\n\n⚠️ **Important Disclaimer**: This information is for educational purposes only and does not constitute medical advice, diagnosis, or treatment. Always consult with a qualified healthcare provider for personalized medical guidance.';
+    
+    return text + disclaimer;
 }
 
 // Detect if we're using a Claude or Nova/Titan model

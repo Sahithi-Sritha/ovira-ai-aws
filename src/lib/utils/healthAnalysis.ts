@@ -118,7 +118,7 @@ export function analyzeHealthRiskFlags(logs: SymptomLog[], profile: UserProfile)
     const cycleInfo = getCurrentCycleInfo(
         logs.map(l => ({ ...l, date: l.date })),
         profile.lastPeriodStart ? new Date(profile.lastPeriodStart) : null,
-        profile.averageCycleLength
+        profile.avgCycleLength
     );
 
     // Anemia
@@ -132,11 +132,11 @@ export function analyzeHealthRiskFlags(logs: SymptomLog[], profile: UserProfile)
     }
 
     // PCOS
-    if (cycleInfo.averageCycleLength > 35 || profile.conditions?.includes('PCOS')) {
+    if (cycleInfo.avgCycleLength > 35 || profile.conditions?.includes('PCOS')) {
         flags.push({
             type: 'pcos',
             severity: 'medium',
-            description: 'Observation of cycles longer than 35 days (average: ' + cycleInfo.averageCycleLength + 'd)',
+            description: 'Observation of cycles longer than 35 days (average: ' + cycleInfo.avgCycleLength + 'd)',
             recommendation: 'Pattern worth discussing for potential hormonal evaluation'
         });
     }

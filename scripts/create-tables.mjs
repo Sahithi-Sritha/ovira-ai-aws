@@ -15,7 +15,17 @@ const TABLES = [
     {
         TableName: process.env.NEXT_PUBLIC_DYNAMODB_USERS_TABLE || 'ovira-users',
         KeySchema: [{ AttributeName: 'userId', KeyType: 'HASH' }],
-        AttributeDefinitions: [{ AttributeName: 'userId', AttributeType: 'S' }],
+        AttributeDefinitions: [
+            { AttributeName: 'userId', AttributeType: 'S' },
+            { AttributeName: 'email', AttributeType: 'S' }
+        ],
+        GlobalSecondaryIndexes: [
+            {
+                IndexName: 'EmailIndex',
+                KeySchema: [{ AttributeName: 'email', KeyType: 'HASH' }],
+                Projection: { ProjectionType: 'ALL' },
+            }
+        ],
         BillingMode: 'PAY_PER_REQUEST',
     },
     {
