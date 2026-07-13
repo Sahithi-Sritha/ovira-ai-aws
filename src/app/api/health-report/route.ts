@@ -20,7 +20,7 @@ interface UserProfileInput {
     displayName?: string;
     ageRange?: string;
     conditions?: string[];
-    averageCycleLength?: number;
+    avgCycleLength?: number;
     lastPeriodStart?: string;
     healthContextSummary?: string;
     dietType?: string;
@@ -178,7 +178,7 @@ function calculateClinicalStats(
     ).length;
 
     // Heavy flow cycles: estimate cycles & count those with ≥ 5 heavy days
-    const cycleLength = userProfile.averageCycleLength || 28;
+    const cycleLength = userProfile.avgCycleLength || 28;
     const totalDaysSpan =
         sortedLogs.length >= 2
             ? Math.ceil(
@@ -208,10 +208,10 @@ function calculateClinicalStats(
 
     // Cycle lengths from last period start (estimate last 3)
     const cycleLengths: number[] = [];
-    if (userProfile.lastPeriodStart && userProfile.averageCycleLength) {
+    if (userProfile.lastPeriodStart && userProfile.avgCycleLength) {
         // Use average as best estimate; we'd need multiple period start dates for actuals
         for (let i = 0; i < Math.min(3, estimatedCycles); i++) {
-            cycleLengths.push(userProfile.averageCycleLength);
+            cycleLengths.push(userProfile.avgCycleLength);
         }
     }
 
@@ -408,7 +408,7 @@ export async function POST(request: NextRequest) {
                         name: userProfile.displayName || 'Patient',
                         ageRange: userProfile.ageRange,
                         conditions: userProfile.conditions || [],
-                        averageCycleLength: userProfile.averageCycleLength || 28,
+                        avgCycleLength: userProfile.avgCycleLength || 28,
                     };
                     reportData.statistics = stats;
                     reportData.model_used = modelUsed;
@@ -440,7 +440,7 @@ USER PROFILE:
 - Name: ${userProfile.displayName || 'Patient'}
 - Age Range: ${userProfile.ageRange || 'Not specified'}
 - Known Conditions: ${userProfile.conditions?.join(', ') || 'None reported'}
-- Average Cycle Length: ${userProfile.averageCycleLength || 28} days
+- Average Cycle Length: ${userProfile.avgCycleLength || 28} days
 - Diet Type: ${userProfile.dietType || 'Not specified'}
 - Staple Grain: ${userProfile.stapleGrain || 'Not specified'}
 - Iron-Rich Food Frequency: ${userProfile.ironRichFoodFrequency || 'Not specified'}
@@ -503,7 +503,7 @@ CALCULATED STATISTICS:
                     name: userProfile.displayName || 'Patient',
                     ageRange: userProfile.ageRange,
                     conditions: userProfile.conditions || [],
-                    averageCycleLength: userProfile.averageCycleLength || 28,
+                    avgCycleLength: userProfile.avgCycleLength || 28,
                 };
                 reportData.statistics = stats;
                 reportData.model_used = model_used;
@@ -647,7 +647,7 @@ function generateFallbackReport(
             name: userProfile.displayName || 'Patient',
             ageRange: userProfile.ageRange,
             conditions: userProfile.conditions || [],
-            averageCycleLength: userProfile.averageCycleLength || 28,
+            avgCycleLength: userProfile.avgCycleLength || 28,
         },
         statistics: stats,
     };

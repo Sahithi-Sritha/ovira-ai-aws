@@ -26,20 +26,36 @@ echo "════════════════════════�
 # ─── 1. Install system dependencies ──────────────────────────────────────────
 
 echo ""
-echo "▸ Step 1/5: Installing system dependencies..."
+echo "▸ Step 1/6: Installing system dependencies..."
 sudo apt-get update -y
 sudo apt-get install -y python3-pip python3-venv git wget build-essential
 
-# ─── 2. Install Python inference stack ───────────────────────────────────────
+# ─── 2. Generate API Key ────────────────────────────────────────────────────
 
 echo ""
-echo "▸ Step 2/5: Installing Python packages..."
+echo "▸ Step 2/6: Generating API key..."
+
+# Generate a secure random API key (32 bytes = 64 hex characters)
+API_KEY=$(openssl rand -hex 32)
+
+# Create config directory and store API key
+sudo mkdir -p /etc/menstllama
+echo "$API_KEY" | sudo tee /etc/menstllama/api_key > /dev/null
+sudo chmod 600 /etc/menstllama/api_key
+sudo chown ubuntu:ubuntu /etc/menstllama/api_key
+
+echo "✓ API key generated and stored at /etc/menstllama/api_key"
+
+# ─── 3. Install Python inference stack ───────────────────────────────────────
+
+echo ""
+echo "▸ Step 3/6: Installing Python packages..."
 pip3 install llama-cpp-python flask flask-cors requests huggingface_hub
 
-# ─── 3. Download quantised model ────────────────────────────────────────────
+# ─── 4. Download quantised model ────────────────────────────────────────────
 
 echo ""
-echo "▸ Step 3/5: Downloading quantised model from HuggingFace..."
+echo "▸ Step 4/6: Downloading quantised model from HuggingFace..."
 echo "  (This may take 5-15 minutes depending on bandwidth)"
 
 mkdir -p /home/ubuntu/models
@@ -58,10 +74,10 @@ model_path = hf_hub_download(
 print(f'✓ Model downloaded to: {model_path}')
 "
 
-# ─── 4. Create Flask inference server ────────────────────────────────────────
+# ─── 5. Create Flask inference server ────────────────────────────────────────
 
 echo ""
-echo "▸ Step 4/5: Creating inference server..."
+echo "▸ Step 5/6: Creating inference server..."
 
 cat > /home/ubuntu/ovira-slm-server.py << 'PYEOF'
 """
@@ -72,12 +88,54 @@ Runs on EC2, serves menstrual-health-specialised completions via HTTP.
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from llama_cpp import Llama
+from functools import wraps
 import json
 import time
 import os
 
 app = Flask(__name__)
 CORS(app)
+
+# ─── Load API Key ───────────────────────────────────────────────────────────
+
+API_KEY_PATH = "/etc/menstllama/api_key"
+API_KEY = None
+
+if os.path.exists(API_KEY_PATH):
+    with open(API_KEY_PATH, 'r') as f:
+        API_KEY = f.read().strip()
+    print("✓ API key loaded from /etc/menstllama/api_key")
+else:
+    print("⚠ WARNING: No API key found at /etc/menstllama/api_key - authentication disabled")
+
+# ─── Authentication Decorator ───────────────────────────────────────────────
+
+def require_api_key(f):
+    """Decorator to check X-API-Key header before processing request."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # If no API key is configured, allow all requests (backward compatibility)
+        if not API_KEY:
+            return f(*args, **kwargs)
+        
+        # Check for X-API-Key header
+        provided_key = request.headers.get('X-API-Key')
+        
+        if not provided_key:
+            return jsonify({
+                "error": "Unauthorized",
+                "message": "X-API-Key header is required"
+            }), 401
+        
+        if provided_key != API_KEY:
+            return jsonify({
+                "error": "Unauthorized", 
+                "message": "Invalid API key"
+            }), 401
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function
 
 # ─── Load model once at startup (takes 30-60 seconds on CPU) ────────────────
 
@@ -121,9 +179,10 @@ def health():
 
 
 @app.route("/chat", methods=["POST"])
+@require_api_key
 def chat():
     """
-    Inference endpoint.
+    Inference endpoint (requires API key authentication).
     Body: { "message": str, "userContext": str }
     Returns: { "response": str, "model": str, "latency_ms": int }
     """
@@ -160,15 +219,19 @@ def chat():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
     print(f"Starting Ovira SLM server on port {port}...")
+    if API_KEY:
+        print("✓ API key authentication enabled")
+    else:
+        print("⚠ Running without authentication (not recommended for production)")
     app.run(host="0.0.0.0", port=port)
 PYEOF
 
 echo "✓ Server script created at /home/ubuntu/ovira-slm-server.py"
 
-# ─── 5. Create systemd service for auto-restart ─────────────────────────────
+# ─── 6. Create systemd service for auto-restart ─────────────────────────────
 
 echo ""
-echo "▸ Step 5/5: Creating systemd service..."
+echo "▸ Step 6/6: Creating systemd service..."
 
 sudo tee /etc/systemd/system/ovira-slm.service > /dev/null << 'SVCEOF'
 [Unit]
@@ -197,9 +260,16 @@ echo ""
 echo "═══════════════════════════════════════════════════════════"
 echo "  ✓ MenstLLaMA server running on port 8080"
 echo ""
+echo "  🔑 API Key: $API_KEY"
+echo ""
 echo "  Next steps:"
 echo "  1. Note your EC2 public IP"
 echo "  2. Add to your .env.local:"
 echo "     MENSTLLAMA_EC2_URL=http://[EC2_PUBLIC_IP]:8080"
+echo "     SLM_API_KEY=$API_KEY"
 echo "  3. Verify: curl http://localhost:8080/health"
+echo "  4. Test auth: curl -H \"X-API-Key: $API_KEY\" \\"
+echo "                     -H \"Content-Type: application/json\" \\"
+echo "                     -d '{\"message\":\"Hello\"}' \\"
+echo "                     http://localhost:8080/chat"
 echo "═══════════════════════════════════════════════════════════"

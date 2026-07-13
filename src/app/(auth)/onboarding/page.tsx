@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Logo } from '@/components/ui/Logo';
+import { Slider } from '@/components/ui/Slider';
 import { HEALTH_CONDITIONS, SUPPORTED_LANGUAGES, SYMPTOM_OPTIONS, OnboardingData } from '@/types';
 import { Check, ChevronLeft, ChevronRight, Shield, Heart, Globe, Calendar, User, Utensils, Activity } from 'lucide-react';
 
@@ -62,13 +63,13 @@ function RangeSlider({
                     {value} {unit}
                 </span>
             </div>
-            <input
-                type="range"
+            <Slider
                 min={min}
                 max={max}
-                value={value}
-                onChange={(e) => onChange(Number(e.target.value))}
-                className="w-full h-2 bg-surface rounded-full appearance-none cursor-pointer accent-primary"
+                step={1}
+                value={[value]}
+                onValueChange={([v]) => onChange(v)}
+                className="w-full"
             />
             <div className="flex justify-between text-xs text-text-muted">
                 <span>{min}</span>
@@ -114,7 +115,7 @@ export default function OnboardingPage() {
         personalGoal: '',
     });
 
-    const { completeOnboarding, user, loading: authLoading } = useAuth();
+    const { completeOnboarding, refreshUserProfile, user, loading: authLoading } = useAuth();
     const router = useRouter();
     const contentRef = useRef<HTMLDivElement>(null);
 
@@ -153,6 +154,8 @@ export default function OnboardingPage() {
         setLoading(true);
         try {
             await completeOnboarding(data);
+            // Refresh profile to ensure onboardingComplete is reflected in state
+            await refreshUserProfile();
             router.replace('/dashboard?welcome=true');
         } catch (error) {
             console.error('Error completing onboarding:', error);

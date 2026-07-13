@@ -197,7 +197,7 @@ export default function SignupPage() {
     const passwordStrength = getPasswordStrength(password);
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-teal-50 via-white to-teal-50">
+        <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#F8F2FB' }}>
             <div className="w-full max-w-md animate-slide-in-up">
                 {/* Logo/Brand */}
                 <div className="flex flex-col items-center mb-6">

@@ -6,13 +6,15 @@
  * automatic fallback signalling so the caller can fall through
  * to Bedrock when the SLM is unavailable.
  *
- * Environment variable:
+ * Environment variables:
  *   MENSTLLAMA_EC2_URL — e.g. http://3.14.15.92:8080
+ *   SLM_API_KEY — API key for authentication
  */
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const MENSTLLAMA_URL = process.env.MENSTLLAMA_EC2_URL || '';
+const SLM_API_KEY = process.env.SLM_API_KEY || '';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,7 +45,15 @@ async function checkSLMHealth(): Promise<boolean> {
     }
 
     try {
+        const headers: Record<string, string> = {};
+        
+        // Add API key if configured (health endpoint doesn't require auth, but good practice)
+        if (SLM_API_KEY) {
+            headers['X-API-Key'] = SLM_API_KEY;
+        }
+        
         const res = await fetch(`${MENSTLLAMA_URL}/health`, {
+            headers,
             signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
         });
         slmAvailable = res.ok;
@@ -75,14 +85,27 @@ export async function chatWithSLM(
     }
 
     try {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+        
+        // Add API key for authentication
+        if (SLM_API_KEY) {
+            headers['X-API-Key'] = SLM_API_KEY;
+        }
+        
         const res = await fetch(`${MENSTLLAMA_URL}/chat`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ message, userContext }),
             signal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
         });
 
         if (!res.ok) {
+            // Log authentication errors specifically
+            if (res.status === 401) {
+                console.error('SLM authentication failed - check SLM_API_KEY environment variable');
+            }
             throw new Error(`SLM returned HTTP ${res.status}`);
         }
 

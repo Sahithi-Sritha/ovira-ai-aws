@@ -8,37 +8,80 @@ module.exports = {
     theme: {
         extend: {
             colors: {
+                /* shadcn/ui CSS variable-based colors */
+                background: 'hsl(var(--background))',
+                foreground: 'hsl(var(--foreground))',
+                card: {
+                    DEFAULT: 'hsl(var(--card))',
+                    foreground: 'hsl(var(--card-foreground))',
+                },
+                popover: {
+                    DEFAULT: 'hsl(var(--popover))',
+                    foreground: 'hsl(var(--popover-foreground))',
+                },
                 primary: {
-                    DEFAULT: '#7C3AED',
+                    DEFAULT: 'hsl(var(--primary))',
+                    foreground: 'hsl(var(--primary-foreground))',
                     light: '#A78BFA',
                     dark: '#5B21B6',
                 },
                 secondary: {
-                    DEFAULT: '#14B8A6',
+                    DEFAULT: 'hsl(var(--secondary))',
+                    foreground: 'hsl(var(--secondary-foreground))',
                     light: '#5EEAD4',
                 },
+                muted: {
+                    DEFAULT: 'hsl(var(--muted))',
+                    foreground: 'hsl(var(--muted-foreground))',
+                },
                 accent: {
-                    DEFAULT: '#EC4899',
+                    DEFAULT: 'hsl(var(--accent))',
+                    foreground: 'hsl(var(--accent-foreground))',
                     light: '#F9A8D4',
                 },
+                destructive: {
+                    DEFAULT: 'hsl(var(--destructive))',
+                },
+                border: 'hsl(var(--border))',
+                input: 'hsl(var(--input))',
+                ring: 'hsl(var(--ring))',
+                chart: {
+                    1: 'hsl(var(--chart-1))',
+                    2: 'hsl(var(--chart-2))',
+                    3: 'hsl(var(--chart-3))',
+                    4: 'hsl(var(--chart-4))',
+                    5: 'hsl(var(--chart-5))',
+                },
+                sidebar: {
+                    DEFAULT: 'hsl(var(--sidebar))',
+                    foreground: 'hsl(var(--sidebar-foreground))',
+                    primary: 'hsl(var(--sidebar-primary))',
+                    'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+                    accent: 'hsl(var(--sidebar-accent))',
+                    'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+                    border: 'hsl(var(--sidebar-border))',
+                    ring: 'hsl(var(--sidebar-ring))',
+                },
+                /* Custom app colors */
                 success: '#10B981',
                 warning: '#F59E0B',
                 error: '#EF4444',
                 info: '#3B82F6',
-                background: '#FAF5FF',
                 surface: {
-                    DEFAULT: '#FFFFFF',
-                    elevated: '#F9FAFB',
+                    DEFAULT: 'hsl(var(--surface))',
+                    elevated: 'hsl(var(--surface-elevated))',
                 },
-                border: '#E5E7EB',
-                'text-primary': '#1F2937',
-                'text-secondary': '#6B7280',
-                'text-muted': '#9CA3AF',
+                'text-primary': 'hsl(var(--text-primary))',
+                'text-secondary': 'hsl(var(--text-secondary))',
+                'text-muted': 'hsl(var(--text-muted))',
             },
             fontFamily: {
                 sans: ['Inter', 'system-ui', 'sans-serif'],
             },
             borderRadius: {
+                lg: 'var(--radius)',
+                md: 'calc(var(--radius) - 2px)',
+                sm: 'calc(var(--radius) - 4px)',
                 'xl': '0.75rem',
                 '2xl': '1rem',
                 '3xl': '1.5rem',

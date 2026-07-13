@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
             try {
                 const getCmd = new GetCommand({
                     TableName: ARTICLES_TABLE,
-                    Key: { id: cacheKey }
+                    Key: { articleId: cacheKey }
                 });
                 const cacheRes = await docClient.send(getCmd);
                 if (cacheRes.Item) {
@@ -58,11 +58,11 @@ export async function GET(request: NextRequest) {
             const cycleInfo = getCurrentCycleInfo(
                 logs as any,
                 profileLastPeriod,
-                profile?.averageCycleLength
+                profile?.avgCycleLength
             );
 
             const prompt = `Generate a short women's health article (150-200 words) for a user who is
-  currently in their ${cycleInfo.currentPhase} phase (day ${cycleInfo.cycleDay} of ${cycleInfo.averageCycleLength}-day cycle).
+  currently in their ${cycleInfo.currentPhase} phase (day ${cycleInfo.cycleDay} of ${cycleInfo.avgCycleLength}-day cycle).
   User context: ${profile?.healthContextSummary || 'No specific health context provided.'}
   
   Format as JSON:
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 
             const articleItem = {
                 ...article,
-                id: cacheKey,
+                articleId: cacheKey,
                 userId,
                 date: today,
                 type: 'daily',

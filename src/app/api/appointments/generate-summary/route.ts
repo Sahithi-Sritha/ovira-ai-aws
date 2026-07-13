@@ -53,7 +53,7 @@ This is based on self-tracked data from the Ovira AI app.
 
 Patient: ${profile.displayName}, ${profile.ageRange}, ${profile.dietType} diet with ${profile.stapleGrain}-dominant staples
 Self-reported concerns: ${profile.conditions?.join(', ') || 'None'}
-Cycle: ${profile.averageCycleLength || 28} days average, ${profile.cycleRegularity || 'not specified'}
+Cycle: ${profile.avgCycleLength || 28} days average, ${profile.cycleRegularity || 'not specified'}
 Questions for this appointment: ${profile.personalGoal || 'General checkup'}
 Tracking: ${stats.totalLogs} entries over ${stats.monthsCovered} months
 

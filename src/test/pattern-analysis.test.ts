@@ -43,7 +43,7 @@ const baseProfile: UserProfile = {
     language: 'en',
     onboardingComplete: true,
     createdAt: '2025-01-01',
-    averageCycleLength: 28,
+    avgCycleLength: 28,
     lastPeriodStart: '2025-03-01',
 };
 

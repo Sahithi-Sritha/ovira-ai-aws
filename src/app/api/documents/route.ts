@@ -4,6 +4,7 @@ import { DynamoDBDocumentClient, QueryCommand, UpdateCommand, PutCommand, Delete
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
+import { invokeClaude } from '@/lib/aws/bedrock';
 
 const dynamoClient = new DynamoDBClient({
     region: process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1',
@@ -95,6 +96,23 @@ export async function POST(request: NextRequest) {
             ContentType: file.type,
         }));
 
+        // Generate AI summary (ponytail: skip OCR for now, add later if needed)
+        let aiSummary = '';
+        try {
+            const summaryPrompt = `You are a medical document analyzer. The user uploaded a document of type "${category}".
+Generate a concise 2-3 sentence summary suitable for a chatbot to understand the key medical information.
+Focus on: diagnosis, test results, dates, measurements, medications mentioned.
+Format: Plain text, factual, no clinical advice.
+
+Document type: ${category}
+Filename: ${file.name}`;
+
+            aiSummary = await invokeClaude(summaryPrompt, 'You are a medical document summarizer. Be concise and factual.');
+        } catch (err) {
+            console.error('AI summary generation failed:', err);
+            aiSummary = `Document: ${category} - ${file.name}`;
+        }
+
         // Save metadata to DynamoDB
         const document = {
             userId,
@@ -105,6 +123,7 @@ export async function POST(request: NextRequest) {
             s3Key,
             fileSize: file.size,
             shouldIncludeInSummary: true,
+            aiSummary,
         };
 
         await docClient.send(new PutCommand({

@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Slider } from '@/components/ui/Slider';
 import { Logo } from '@/components/ui/Logo';
 import {
     SUPPORTED_LANGUAGES,
@@ -38,6 +39,8 @@ import {
     Globe
 } from 'lucide-react';
 import Link from 'next/link';
+import { AppleSwitch } from '@/components/unlumen-ui/apple-switch';
+import { BlobCard } from '@/components/unlumen-ui/blob-card';
 
 type TabType = 'profile' | 'documents' | 'cycle' | 'doctors' | 'ai' | 'privacy' | 'subscription';
 
@@ -402,18 +405,10 @@ export default function SettingsHubPage() {
                             </div>
                             <Button
                                 leftIcon={<Upload size={18} />}
-                                onClick={() => fileInputRef.current?.click()}
-                                isLoading={uploading}
+                                onClick={() => router.push('/documents/upload')}
                             >
                                 Upload
                             </Button>
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                className="hidden"
-                                onChange={handleFileUpload}
-                                accept=".pdf,image/*"
-                            />
                         </div>
 
                         <Card variant="outlined" className="bg-primary/5 border-primary/20">
@@ -618,11 +613,13 @@ export default function SettingsHubPage() {
                                         <label className="text-sm font-medium">Average Cycle Length</label>
                                         <span className="text-primary font-bold">{profileForm.averageCycleLength} days</span>
                                     </div>
-                                    <input
-                                        type="range" min="21" max="42"
-                                        value={profileForm.averageCycleLength}
-                                        onChange={e => setProfileForm({ ...profileForm, averageCycleLength: parseInt(e.target.value) })}
-                                        className="w-full h-2 bg-surface-elevated rounded-lg appearance-none cursor-pointer accent-primary"
+                                    <Slider
+                                        min={21}
+                                        max={42}
+                                        step={1}
+                                        value={[profileForm.averageCycleLength]}
+                                        onValueChange={([value]) => setProfileForm({ ...profileForm, averageCycleLength: value })}
+                                        className="w-full"
                                     />
                                     <p className="text-[10px] text-text-muted mt-2">Normal range: 21-35 days</p>
                                 </div>
@@ -640,9 +637,7 @@ export default function SettingsHubPage() {
                                                 <p className="text-sm font-medium">{item.label}</p>
                                                 <p className="text-xs text-text-secondary">{item.desc}</p>
                                             </div>
-                                            <div className="w-10 h-6 bg-primary rounded-full relative cursor-pointer opacity-50">
-                                                <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div>
-                                            </div>
+                                                <AppleSwitch size="sm" tone="accent" defaultChecked={item.label === 'Period Reminder' || item.label === 'Weekly Summary'} />
                                         </div>
                                     ))}
                                 </div>
@@ -766,56 +761,55 @@ export default function SettingsHubPage() {
                 {/* TAB 7: SUBSCRIPTION */}
                 {activeTab === 'subscription' && (
                     <div className="space-y-6 animate-fade-in">
-                        <Card variant="gradient" className="bg-gradient-to-br from-primary to-accent text-white border-none shadow-xl shadow-primary/20">
-                            <CardContent className="p-8">
-                                <div className="flex justify-between items-start mb-8">
+                        <BlobCard
+                            header={
+                                <div className="flex justify-between items-start">
                                     <div>
                                         <div className="flex items-center gap-3">
                                             <Logo variant="icon" size={48} showText={false} />
-                                            <h3 className="text-2xl font-bold">Ovira Pro</h3>
+                                            <h3 className="text-2xl font-bold text-gray-900">Ovira Pro</h3>
                                         </div>
-                                        <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Active</span>
-                                        <p className="text-white/80">Renewal on Oct 12, 2026</p>
+                                        <span className="bg-white/90 text-gray-900 px-2 py-0.5 rounded text-[10px] font-bold uppercase mt-2 inline-block">Active</span>
+                                        <p className="text-gray-700 mt-1">Renewal on Oct 12, 2026</p>
                                     </div>
-                                    <div className="p-3 bg-white/10 rounded-2xl">
+                                    <div className="p-3 bg-white/20 rounded-2xl text-gray-900">
                                         <Sparkles size={32} />
                                     </div>
                                 </div>
-
+                            }
+                            headerHeight={200}
+                        >
+                            <div className="p-6 space-y-8">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="p-4 bg-white/10 rounded-xl">
-                                        <p className="text-[10px] font-bold uppercase text-white/60 mb-1">AI Reports Used</p>
-                                        <div className="flex items-end justify-between">
-                                            <p className="text-2xl font-bold">Unlimited</p>
-                                        </div>
+                                    <div className="p-4 bg-surface-elevated border border-border rounded-xl">
+                                        <p className="text-[10px] font-bold uppercase text-text-muted mb-1">AI Reports Used</p>
+                                        <p className="text-2xl font-bold text-foreground">Unlimited</p>
                                     </div>
-                                    <div className="p-4 bg-white/10 rounded-xl">
-                                        <p className="text-[10px] font-bold uppercase text-white/60 mb-1">Doctor Chat Sessions</p>
-                                        <div className="flex items-end justify-between">
-                                            <p className="text-2xl font-bold">3 <span className="text-sm font-normal text-white/60">/ 5 used</span></p>
-                                        </div>
+                                    <div className="p-4 bg-surface-elevated border border-border rounded-xl">
+                                        <p className="text-[10px] font-bold uppercase text-text-muted mb-1">Doctor Chat Sessions</p>
+                                        <p className="text-2xl font-bold text-foreground">3 <span className="text-sm font-normal text-text-secondary">/ 5 used</span></p>
                                     </div>
                                 </div>
-                            </CardContent>
-                        </Card>
 
-                        <div className="space-y-4">
-                            <h4 className="font-bold">Plan Benefits</h4>
-                            {[
-                                'Unlimited personalised AI health reports',
-                                'Direct chat with certified gynaecologists',
-                                'Clinical-grade risk analysis & early detection',
-                                'Secure medical document storage system',
-                                'Ad-free experience'
-                            ].map(benefit => (
-                                <div key={benefit} className="flex items-center gap-3 text-sm">
-                                    <div className="w-5 h-5 rounded-full bg-success/20 text-success flex items-center justify-center flex-shrink-0">
-                                        <Check size={12} />
-                                    </div>
-                                    {benefit}
+                                <div className="space-y-4">
+                                    <h4 className="font-bold">Plan Benefits</h4>
+                                    {[
+                                        'Unlimited personalised AI health reports',
+                                        'Direct chat with certified gynaecologists',
+                                        'Clinical-grade risk analysis & early detection',
+                                        'Secure medical document storage system',
+                                        'Ad-free experience'
+                                    ].map(benefit => (
+                                        <div key={benefit} className="flex items-center gap-3 text-sm">
+                                            <div className="w-5 h-5 rounded-full bg-success/20 text-success flex items-center justify-center flex-shrink-0">
+                                                <Check size={12} />
+                                            </div>
+                                            {benefit}
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        </BlobCard>
                     </div>
                 )}
             </div>
