@@ -53,26 +53,19 @@ function containsProhibitedTerms(text: string): boolean {
     return PROHIBITED_MEDICAL_TERMS.some(term => lowerText.includes(term));
 }
 
-// Sanitize AI response to ensure non-diagnostic output
+// Sanitize AI response — strip prohibited terms, no disclaimer footer
 export function sanitizeResponse(text: string): string {
-    // Check if response contains prohibited medical terms
-    const containsProhibited = containsProhibitedTerms(text);
-    
-    if (containsProhibited) {
-        // Log for human review
-        console.warn('[MEDICAL TERM FLAGGED] Response contains prohibited medical terms and requires human review:', {
+    if (containsProhibitedTerms(text)) {
+        console.warn('[MEDICAL TERM FLAGGED] Response contains prohibited medical terms:', {
             timestamp: new Date().toISOString(),
-            flaggedTerms: PROHIBITED_MEDICAL_TERMS.filter(term => 
+            flaggedTerms: PROHIBITED_MEDICAL_TERMS.filter(term =>
                 text.toLowerCase().includes(term)
             ),
             responsePreview: text.substring(0, 200) + '...',
         });
     }
-
-    // Add disclaimer footer to all responses
-    const disclaimer = '\n\n⚠️ **Important Disclaimer**: This information is for educational purposes only and does not constitute medical advice, diagnosis, or treatment. Always consult with a qualified healthcare provider for personalized medical guidance.';
-    
-    return text + disclaimer;
+    // Return clean — no disclaimer appended here
+    return text;
 }
 
 // Detect if we're using a Claude or Nova/Titan model

@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { Logo } from '@/components/ui/Logo';
-import { Home, Calendar, MessageCircle, FileText, Settings, LogOut, Menu, X, User, Bell, Users, BookOpen, Clock } from 'lucide-react';
+import { Home, Calendar, MessageCircle, FileText, Settings, LogOut, Menu, X, User, Bell, Users, BookOpen, Clock, Gift } from 'lucide-react';
 import {
     loadSettings, saveSettings, loadNotifications, getUnreadCount,
     checkAndGenerateNotifications
@@ -87,6 +87,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { name: 'My Appointments', href: '/appointments', icon: Clock },
         { name: 'Reports', href: '/reports', icon: FileText },
         { name: 'Health Library', href: '/articles', icon: BookOpen },
+        { name: 'Recommendations', href: '/recommendations', icon: Gift },
         { name: 'Notifications', href: '/notifications', icon: Bell, badge: unreadCount },
         { name: 'Settings', href: '/settings', icon: Settings },
     ];

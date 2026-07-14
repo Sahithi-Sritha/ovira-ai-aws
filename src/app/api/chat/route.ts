@@ -7,30 +7,37 @@ import { getAIContextString } from '@/lib/buildCompleteContext';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Format citation sources into a readable footer string.
- */
-function formatCitationFooter(citations: Citation[]): string {
-    if (citations.length === 0) return '';
+// Topics outside women's / menstrual health that Aria should decline
+const OFF_TOPIC_PATTERNS = [
+    /\b(math|maths|mathematics|calculus|algebra|geometry|statistics)\b/i,
+    /\b(physics|chemistry|biology|science)\b/i,
+    /\b(history|geography|politics|economics|finance|invest)\b/i,
+    /\b(sport|cricket|football|soccer|tennis|basketball)\b/i,
+    /\b(recipe|cook|food)\b(?!.*(period|cycle|cramp|iron|nutrition|hormone))/i,
+    /\b(code|programming|javascript|python|css|html)\b/i,
+    /\b(weather|news|current events)\b/i,
+    /\b(movie|film|music|song|celebrity|actor)\b/i,
+    /\b(\d+\s*[+\-*/]\s*\d+|\bsolve\b|\bcalculate\b|\bequation\b)/i,
+];
 
-    const sourceNames = citations
-        .map((c) => c.source)
-        .filter((s) => s !== 'Unknown source')
-        .filter((s, i, arr) => arr.indexOf(s) === i);
+const OFF_TOPIC_REPLY =
+    "I'm Aria, and I'm here specifically to help with women's health and menstrual wellness questions. I'm not able to help with that topic — please feel free to ask me anything about your cycle, symptoms, or reproductive health.";
 
-    if (sourceNames.length === 0) return '';
-
-    return `\n\n📚 Sources: ${sourceNames.join(', ')}`;
+function isOffTopic(message: string): boolean {
+    return OFF_TOPIC_PATTERNS.some(p => p.test(message));
 }
 
 /**
- * Ensure the consultation reminder is appended if not already present.
+ * Strip raw RAG citation headers from the final response text.
+ * These look like: [1] (Source: chatbot-health. 000) ...
  */
-function ensureConsultationReminder(text: string): string {
-    if (text.includes('healthcare provider') || text.includes('consult')) {
-        return text;
-    }
-    return text + '\n\nPlease consult a healthcare provider for personalised advice.';
+function stripCitationHeaders(text: string): string {
+    // Remove numbered source blocks: [N] (Source: ...) followed by content
+    return text
+        .replace(/\[\d+\]\s*\(Source:[^)]+\)[^\n]*/g, '')
+        .replace(/📚\s*Sources?:[^\n]*/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 }
 
 // ─── Route Handler ───────────────────────────────────────────────────────────
@@ -44,6 +51,17 @@ async function handlePost(request: NextRequest) {
                 { error: 'Message is required' },
                 { status: 400 },
             );
+        }
+
+        // ── Topic guard: decline non-health questions immediately ───────────
+        if (isOffTopic(message)) {
+            return NextResponse.json({
+                message: OFF_TOPIC_REPLY,
+                citations: [],
+                model: 'topic-guard',
+                ragEnabled: false,
+                slmUsed: false,
+            });
         }
 
         // Build complete health context from all data sources
@@ -83,10 +101,9 @@ async function handlePost(request: NextRequest) {
                 if (!slmResult.fallbackUsed) {
                     // SLM succeeded — apply safety guardrails and return
                     const sanitized = sanitizeResponse(slmResult.response);
-                    const finalMessage = ensureConsultationReminder(sanitized);
 
                     return NextResponse.json({
-                        message: finalMessage,
+                        message: stripCitationHeaders(sanitized),
                         citations: [],
                         model: 'MenstLLaMA-EC2 (Menstrual Health Specialist)',
                         ragEnabled: false,
@@ -126,11 +143,10 @@ async function handlePost(request: NextRequest) {
 
             // Apply medical safety guardrails
             const sanitizedAnswer = sanitizeResponse(kbResult.response);
-            const finalMessage = ensureConsultationReminder(sanitizedAnswer);
 
             return NextResponse.json({
-                message: finalMessage,
-                citations: kbResult.citations,
+                message: stripCitationHeaders(sanitizedAnswer),
+                citations: [],
                 model: kbResult.modelUsed,
                 ragEnabled: !kbResult.fallbackUsed,
                 slmUsed: false,
@@ -152,10 +168,8 @@ async function handlePost(request: NextRequest) {
                 contextString,
             );
 
-            const finalMessage = ensureConsultationReminder(response);
-
             return NextResponse.json({
-                message: finalMessage,
+                message: stripCitationHeaders(response),
                 citations: [],
                 model: model_used,
                 ragEnabled: false,

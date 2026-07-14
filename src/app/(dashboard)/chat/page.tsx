@@ -8,6 +8,10 @@ import { Send, ArrowLeft, Sparkles, AlertCircle, User, Bot } from 'lucide-react'
 import Link from 'next/link';
 import { getCurrentCycleInfo } from '@/lib/utils/cycle-analysis';
 import { formatDate } from '@/lib/utils';
+// @ts-ignore — motion/react types not resolving with bundler moduleResolution, runtime is fine
+import { motion, AnimatePresence } from 'motion/react';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Message {
     id: string;
@@ -17,6 +21,142 @@ interface Message {
     slmUsed?: boolean;
 }
 
+// ─── Thinking steps ───────────────────────────────────────────────────────────
+
+const THINKING_STEPS = [
+    { icon: '🧠', label: 'Reading Health Profile…'          },
+    { icon: '📄', label: 'Reading Uploaded Reports…'        },
+    { icon: '📚', label: 'Searching WHO Knowledge Base…'    },
+    { icon: '🔍', label: 'Retrieving Similar Medical Context…' },
+    { icon: '🤖', label: 'Selecting AI Model…'              },
+    { icon: '✍️',  label: 'Generating Personalised Response…' },
+] as const;
+
+// Each step auto-advances every N ms (last step stays until response arrives)
+const STEP_DURATION = 900; // ms per step
+
+
+// ─── ThinkingIndicator component ─────────────────────────────────────────────
+
+function ThinkingIndicator({ visible }: { visible: boolean }) {
+    const [stepIndex, setStepIndex] = useState(0);
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // Reset and advance steps whenever visible turns true
+    useEffect(() => {
+        if (!visible) {
+            setStepIndex(0);
+            if (timerRef.current) clearInterval(timerRef.current);
+            return;
+        }
+        setStepIndex(0);
+        timerRef.current = setInterval(() => {
+            setStepIndex(prev => {
+                // Stop advancing at last step — stays until visible→false
+                if (prev >= THINKING_STEPS.length - 1) {
+                    clearInterval(timerRef.current!);
+                    return prev;
+                }
+                return prev + 1;
+            });
+        }, STEP_DURATION);
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    }, [visible]);
+
+    // Progress: 0→1 based on stepIndex
+    const progress = (stepIndex + 1) / THINKING_STEPS.length;
+
+    return (
+        <AnimatePresence>
+            {visible && (
+                <motion.div
+                    key="thinking"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6, transition: { duration: 0.3 } }}
+                    transition={{ duration: 0.25 }}
+                    className="flex gap-3 justify-start"
+                >
+                    {/* Avatar */}
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center flex-shrink-0 mt-1">
+                        <Bot size={16} className="text-white" />
+                    </div>
+
+                    {/* Thinking card */}
+                    <div className="bg-surface-elevated border border-border/60 rounded-2xl rounded-tl-sm p-4 min-w-[260px] max-w-xs space-y-3">
+
+                        {/* Step list */}
+                        <div className="space-y-2">
+                            {THINKING_STEPS.map((step, i) => {
+                                const isDone    = i < stepIndex;
+                                const isActive  = i === stepIndex;
+                                const isPending = i > stepIndex;
+
+                                return (
+                                    <motion.div
+                                        key={step.label}
+                                        initial={false}
+                                        animate={{
+                                            opacity: isPending ? 0.35 : 1,
+                                        }}
+                                        transition={{ duration: 0.3 }}
+                                        className="flex items-center gap-2.5"
+                                    >
+                                        {/* Icon / checkmark */}
+                                        <span className="text-base leading-none w-5 text-center shrink-0">
+                                            {isDone ? (
+                                                <motion.span
+                                                    key="check"
+                                                    initial={{ scale: 0.5, opacity: 0 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                    className="text-emerald-500 text-sm"
+                                                >
+                                                    ✓
+                                                </motion.span>
+                                            ) : step.icon}
+                                        </span>
+
+                                        {/* Label */}
+                                        <span className={`text-xs font-medium transition-colors ${
+                                            isDone   ? 'text-muted-foreground line-through' :
+                                            isActive ? 'text-text-primary' :
+                                                       'text-muted-foreground'
+                                        }`}>
+                                            {step.label}
+                                        </span>
+
+                                        {/* Active pulse dot */}
+                                        {isActive && (
+                                            <motion.span
+                                                className="ml-auto w-1.5 h-1.5 rounded-full bg-primary shrink-0"
+                                                animate={{ opacity: [1, 0.2, 1] }}
+                                                transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                                            />
+                                        )}
+                                    </motion.div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="h-1 w-full rounded-full bg-border overflow-hidden">
+                            <motion.div
+                                className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
+                                initial={{ width: '0%' }}
+                                animate={{ width: `${progress * 100}%` }}
+                                transition={{ duration: 0.5, ease: 'easeOut' }}
+                            />
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+}
+
+
+// ─── Starter questions ────────────────────────────────────────────────────────
+
 const STARTER_QUESTIONS = [
     "What are common PMS symptoms?",
     "How can I manage period cramps?",
@@ -24,214 +164,117 @@ const STARTER_QUESTIONS = [
     "What is a normal cycle length?",
 ];
 
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 export default function ChatPage() {
     const { user, userProfile } = useAuth();
     const [messages, setMessages] = useState<Message[]>([]);
-    const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [healthSummary, setHealthSummary] = useState('');
+    const [input, setInput]       = useState('');
+    const [loading, setLoading]   = useState(false);
     const [contextTags, setContextTags] = useState<string[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
+    const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    useEffect(() => { scrollToBottom(); }, [messages, loading]);
 
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
-
-    // Fetch complete health context for display
+    // Fetch context tags for the header strip
     useEffect(() => {
         const fetchContext = async () => {
             if (!user) return;
-            
             try {
-                const response = await fetch(`/api/context?userId=${user.username}`);
-                const data = await response.json();
-                
+                const res  = await fetch(`/api/context?userId=${user.username}`);
+                const data = await res.json();
                 if (data.success && data.context) {
                     const tags: string[] = [];
-                    
-                    // Add conditions
-                    if (data.context.profile.conditions?.length > 0) {
-                        tags.push(...data.context.profile.conditions);
-                    }
-                    
-                    // Add diet
-                    if (data.context.profile.diet) {
-                        tags.push(data.context.profile.diet);
-                    }
-                    
-                    // Add cycle length
-                    if (data.context.profile.cycleLength) {
-                        tags.push(`Cycle: ${data.context.profile.cycleLength} days`);
-                    }
-                    
-                    // Add documents
-                    if (data.context.documents?.length > 0) {
-                        data.context.documents.forEach((doc: any) => {
-                            tags.push(`📄 ${doc.category}`);
-                        });
-                    }
-                    
+                    if (data.context.profile.conditions?.length) tags.push(...data.context.profile.conditions);
+                    if (data.context.profile.diet)                tags.push(data.context.profile.diet);
+                    if (data.context.profile.cycleLength)         tags.push(`Cycle: ${data.context.profile.cycleLength} days`);
+                    if (data.context.documents?.length)           data.context.documents.forEach((d: any) => tags.push(`📄 ${d.category}`));
                     setContextTags(tags);
                 }
-            } catch (err) {
-                console.error('Failed to fetch context:', err);
-            }
+            } catch (e) { console.error(e); }
         };
-        
         fetchContext();
     }, [user]);
 
-    // Fetch user's health data and build a summary for the AI
+    // Build health summary for AI (unchanged)
+    const [healthSummary, setHealthSummary] = useState('');
     useEffect(() => {
-        const buildHealthSummary = async () => {
+        const build = async () => {
             if (!user) return;
-
             try {
-                const response = await fetch(`/api/symptoms?userId=${user.username}&limit=100`);
-                const data = await response.json();
-
+                const res  = await fetch(`/api/symptoms?userId=${user.username}&limit=100`);
+                const data = await res.json();
                 if (!data.success || !data.logs) return;
-
-                const logs = data.logs as Array<{ date: string; flowLevel: string; painLevel: number; mood: string; energyLevel: string; symptoms: string[]; notes?: string;[key: string]: any }>;
-
-                // Parse profile lastPeriodStart safely
+                const logs = data.logs as Array<{ date: string; flowLevel: string; painLevel: number; mood: string; energyLevel: string; symptoms: string[]; notes?: string; [key: string]: any }>;
                 let profileLastPeriod: Date | null = null;
                 if (userProfile?.lastPeriodStart) {
                     const lps = userProfile.lastPeriodStart as any;
-                    if (typeof lps === 'string') profileLastPeriod = new Date(lps);
-                    else if (lps?.toDate) profileLastPeriod = lps.toDate();
+                    profileLastPeriod = typeof lps === 'string' ? new Date(lps) : lps?.toDate?.() ?? null;
                 }
-
-                // Get cycle analysis
-                const cycleInfo = getCurrentCycleInfo(logs, profileLastPeriod, userProfile?.averageCycleLength);
-
-                // Build summary of recent logs (last 7)
-                const recentLogs = logs.slice(0, 7);
-                const recentSymptoms: string[] = [];
-                let totalPain = 0;
-                let painCount = 0;
-                const moods: string[] = [];
-                const flowLevels: string[] = [];
-
+                const cycleInfo   = getCurrentCycleInfo(logs, profileLastPeriod, (userProfile as any)?.averageCycleLength);
+                const recentLogs  = logs.slice(0, 7);
+                const recentSymptoms: string[] = []; let totalPain = 0; let painCount = 0; const moods: string[] = []; const flowLevels: string[] = [];
                 for (const log of recentLogs) {
                     if (log.symptoms?.length) recentSymptoms.push(...log.symptoms);
                     if (log.painLevel != null) { totalPain += log.painLevel; painCount++; }
                     if (log.mood) moods.push(log.mood);
                     if (log.flowLevel && log.flowLevel !== 'none') flowLevels.push(log.flowLevel);
                 }
-
-                const avgPain = painCount > 0 ? (totalPain / painCount).toFixed(1) : 'N/A';
-                const uniqueSymptoms = [...new Set(recentSymptoms)];
-                const moodSummary = moods.length > 0 ? moods.slice(0, 3).join(', ') : 'not tracked';
-
-                // Predicted next period date
-                const nextPeriodFormatted = formatDate(cycleInfo.nextPeriodDate, 'MMMM d, yyyy');
-
-                // Build the summary string
-                let summary = `USER HEALTH PROFILE:\n`;
-                summary += `- Name: ${userProfile?.displayName || 'Unknown'}\n`;
-                summary += `- Age range: ${userProfile?.ageRange || 'Unknown'}\n`;
-                if (userProfile?.conditions?.length) {
-                    summary += `- Known conditions: ${userProfile.conditions.join(', ')}\n`;
-                }
-                summary += `\nCYCLE STATUS:\n`;
-                summary += `- Current cycle day: Day ${cycleInfo.cycleDay} of ${cycleInfo.averageCycleLength}\n`;
-                summary += `- Current phase: ${cycleInfo.currentPhase}\n`;
-                summary += `- Average cycle length: ${cycleInfo.averageCycleLength} days${cycleInfo.hasSufficientData ? ' (computed from logs)' : ' (default)'}\n`;
-                summary += `- Days until next period: ${cycleInfo.daysUntilNextPeriod}\n`;
-                summary += `- Next period expected: ${nextPeriodFormatted}\n`;
-                summary += `- Periods detected from logs: ${cycleInfo.periodStartDates.length}\n`;
-                summary += `\nRECENT HEALTH DATA (last 7 logs):\n`;
-                summary += `- Average pain level: ${avgPain}/10\n`;
-                summary += `- Recent moods: ${moodSummary}\n`;
-                if (uniqueSymptoms.length > 0) {
-                    summary += `- Recent symptoms: ${uniqueSymptoms.join(', ')}\n`;
-                }
-                if (flowLevels.length > 0) {
-                    summary += `- Recent flow levels: ${flowLevels.join(', ')}\n`;
-                }
-                summary += `- Total logs recorded: ${logs.length}\n`;
-
-                setHealthSummary(summary);
-            } catch (error) {
-                console.error('Error building health summary for AI:', error);
-            }
+                const avgPain         = painCount > 0 ? (totalPain / painCount).toFixed(1) : 'N/A';
+                const uniqueSymptoms  = [...new Set(recentSymptoms)];
+                const nextFormatted   = formatDate(cycleInfo.nextPeriodDate);
+                let s = `USER HEALTH PROFILE:\n- Name: ${userProfile?.displayName || 'Unknown'}\n- Age: ${userProfile?.ageRange || 'Unknown'}\n`;
+                if (userProfile?.conditions?.length) s += `- Conditions: ${userProfile.conditions.join(', ')}\n`;
+                s += `\nCYCLE: Day ${cycleInfo.cycleDay} of ${cycleInfo.avgCycleLength}, ${cycleInfo.currentPhase} phase, next ~${nextFormatted}\n`;
+                s += `RECENT: avg pain ${avgPain}/10, moods: ${moods.slice(0,3).join(', ')}\n`;
+                if (uniqueSymptoms.length) s += `Symptoms: ${uniqueSymptoms.join(', ')}\n`;
+                setHealthSummary(s);
+            } catch (e) { console.error(e); }
         };
-
-        buildHealthSummary();
+        build();
     }, [user, userProfile]);
+
 
     const sendMessage = async (content: string) => {
         if (!content.trim() || loading) return;
-
-        const userMessage: Message = {
-            id: Date.now().toString(),
-            role: 'user',
-            content: content.trim(),
-            timestamp: new Date(),
-        };
-
-        setMessages((prev) => [...prev, userMessage]);
+        const userMsg: Message = { id: Date.now().toString(), role: 'user', content: content.trim(), timestamp: new Date() };
+        setMessages(prev => [...prev, userMsg]);
         setInput('');
         setLoading(true);
-
         try {
-            const response = await fetch('/api/chat', {
+            const res  = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: content,
-                    history: messages.slice(-10),
-                    userId: user?.username,
-                }),
+                body: JSON.stringify({ message: content, history: messages.slice(-10), userId: user?.username }),
             });
-
-            const data = await response.json();
-
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
-            const assistantMessage: Message = {
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            setMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
                 content: data.message,
                 timestamp: new Date(),
                 slmUsed: data.slmUsed === true,
-            };
-
-            setMessages((prev) => [...prev, assistantMessage]);
-        } catch (error) {
-            console.error('Error sending message:', error);
-            const errorMessage: Message = {
+            }]);
+        } catch {
+            setMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: "I'm sorry, I'm having trouble responding right now. Please try again in a moment.",
+                content: "I'm sorry, I'm having trouble responding right now. Please try again.",
                 timestamp: new Date(),
-            };
-            setMessages((prev) => [...prev, errorMessage]);
+            }]);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        sendMessage(input);
-    };
-
     return (
         <div className="max-w-3xl mx-auto h-[calc(100vh-8rem)] flex flex-col">
-            {/* Header */}
+
+            {/* ── Header ───────────────────────────────────────────── */}
             <div className="flex items-center gap-4 mb-4">
-                <Link
-                    href="/dashboard"
-                    className="p-2 rounded-xl hover:bg-surface-elevated transition-colors"
-                >
+                <Link href="/dashboard" className="p-2 rounded-xl hover:bg-surface-elevated transition-colors">
                     <ArrowLeft size={24} />
                 </Link>
                 <div className="flex-1">
@@ -244,16 +287,11 @@ export default function ChatPage() {
                             <p className="text-sm text-text-secondary">Your compassionate health companion</p>
                         </div>
                     </div>
-                    
-                    {/* Context Tags */}
                     {contextTags.length > 0 && (
                         <div className="flex flex-wrap gap-2 ml-[52px]">
                             <span className="text-xs font-medium text-text-muted">AI Context:</span>
                             {contextTags.map((tag, i) => (
-                                <span
-                                    key={i}
-                                    className="px-2 py-1 text-xs bg-success/10 text-success rounded-full border border-success/20"
-                                >
+                                <span key={i} className="px-2 py-1 text-xs bg-success/10 text-success rounded-full border border-success/20">
                                     ✓ {tag}
                                 </span>
                             ))}
@@ -262,11 +300,12 @@ export default function ChatPage() {
                 </div>
             </div>
 
-            {/* Chat Area */}
+            {/* ── Chat area ─────────────────────────────────────────── */}
             <Card variant="elevated" className="flex-1 flex flex-col overflow-hidden">
-                {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {messages.length === 0 ? (
+
+                    {/* Empty state */}
+                    {messages.length === 0 && !loading ? (
                         <div className="h-full flex flex-col items-center justify-center text-center px-4">
                             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-6">
                                 <Sparkles className="w-8 h-8 text-primary" />
@@ -274,92 +313,75 @@ export default function ChatPage() {
                             <h2 className="text-xl font-semibold mb-2">Hello! I&apos;m Ovira AI</h2>
                             <p className="text-text-secondary mb-6 max-w-sm">
                                 I&apos;m here to help answer your women&apos;s health questions with empathy and care.
-                                What would you like to know?
                             </p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-md">
-                                {STARTER_QUESTIONS.map((question) => (
-                                    <button
-                                        key={question}
-                                        onClick={() => sendMessage(question)}
-                                        className="p-3 text-left text-sm rounded-xl bg-surface-elevated hover:bg-primary/10 hover:text-primary transition-colors"
-                                    >
-                                        {question}
+                                {STARTER_QUESTIONS.map(q => (
+                                    <button key={q} onClick={() => sendMessage(q)}
+                                        className="p-3 text-left text-sm rounded-xl bg-surface-elevated hover:bg-primary/10 hover:text-primary transition-colors">
+                                        {q}
                                     </button>
                                 ))}
                             </div>
                         </div>
                     ) : (
                         <>
-                            {messages.map((message) => (
-                                <React.Fragment key={message.id}>
-                                    <div
-                                        className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'
-                                            }`}
+                            {/* Messages */}
+                            {messages.map(msg => (
+                                <React.Fragment key={msg.id}>
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 6 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.25 }}
+                                        className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                                     >
-                                        {message.role === 'assistant' && (
+                                        {msg.role === 'assistant' && (
                                             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center flex-shrink-0">
                                                 <Bot size={16} className="text-white" />
                                             </div>
                                         )}
-                                        <div
-                                            className={`max-w-[80%] p-4 rounded-2xl ${message.role === 'user'
+                                        <div className={`max-w-[80%] p-4 rounded-2xl text-sm whitespace-pre-wrap ${
+                                            msg.role === 'user'
                                                 ? 'bg-primary text-white rounded-tr-sm'
                                                 : 'bg-surface-elevated text-text-primary rounded-tl-sm'
-                                                }`}
-                                        >
-                                            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                                        }`}>
+                                            {msg.content}
                                         </div>
-                                        {message.role === 'user' && (
+                                        {msg.role === 'user' && (
                                             <div className="w-8 h-8 rounded-lg bg-surface-elevated flex items-center justify-center flex-shrink-0">
                                                 <User size={16} className="text-text-secondary" />
                                             </div>
                                         )}
-                                    </div>
-                                    {/* MenstLLaMA specialist badge */}
-                                    {message.role === 'assistant' && message.slmUsed && (
+                                    </motion.div>
+                                    {msg.role === 'assistant' && msg.slmUsed && (
                                         <div className="flex justify-start ml-11 -mt-2 mb-1">
                                             <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 text-xs rounded-full px-3 py-1">
-                                                🧬 Powered by MenstLLaMA &mdash; fine-tuned on 23,820 Indian menstrual health Q&amp;As
+                                                🧬 Powered by MenstLLaMA — fine-tuned on 23,820 Indian menstrual health Q&As
                                             </span>
                                         </div>
                                     )}
                                 </React.Fragment>
                             ))}
-                            {loading && (
-                                <div className="flex gap-3 justify-start">
-                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center flex-shrink-0">
-                                        <Bot size={16} className="text-white" />
-                                    </div>
-                                    <div className="bg-surface-elevated p-4 rounded-2xl rounded-tl-sm">
-                                        <div className="flex gap-1">
-                                            <div className="w-2 h-2 bg-text-muted rounded-full animate-bounce" />
-                                            <div className="w-2 h-2 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                                            <div className="w-2 h-2 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+
+                            {/* AI Thinking indicator */}
+                            <ThinkingIndicator visible={loading} />
+
                             <div ref={messagesEndRef} />
                         </>
                     )}
                 </div>
 
-                {/* Input Area */}
+                {/* ── Input ─────────────────────────────────────────── */}
                 <div className="p-4 border-t border-border">
-                    <form onSubmit={handleSubmit} className="flex gap-2">
+                    <form onSubmit={e => { e.preventDefault(); sendMessage(input); }} className="flex gap-2">
                         <input
                             type="text"
                             value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            placeholder="Ask me anything about women's health..."
-                            className="flex-1 px-4 py-3 rounded-xl border bg-surface text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                            onChange={e => setInput(e.target.value)}
+                            placeholder="Ask me anything about women's health…"
                             disabled={loading}
+                            className="flex-1 px-4 py-3 rounded-xl border bg-surface text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-60 transition-opacity"
                         />
-                        <Button
-                            type="submit"
-                            disabled={!input.trim() || loading}
-                            className="px-4"
-                        >
+                        <Button type="submit" disabled={!input.trim() || loading} className="px-4">
                             <Send size={20} />
                         </Button>
                     </form>
@@ -369,10 +391,7 @@ export default function ChatPage() {
             {/* Disclaimer */}
             <div className="mt-3 flex items-start gap-2 text-xs text-text-muted px-2">
                 <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                <p>
-                    Ovira AI provides educational information only, not medical advice. Always consult a
-                    healthcare professional for medical concerns.
-                </p>
+                <p>Ovira AI provides educational information only, not medical advice. Always consult a healthcare professional for medical concerns.</p>
             </div>
         </div>
     );
