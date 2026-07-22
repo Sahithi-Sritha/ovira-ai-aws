@@ -7,31 +7,7 @@ import { getAIContextString } from '@/lib/buildCompleteContext';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Format citation sources into a readable footer string.
- */
-function formatCitationFooter(citations: Citation[]): string {
-    if (citations.length === 0) return '';
-
-    const sourceNames = citations
-        .map((c) => c.source)
-        .filter((s) => s !== 'Unknown source')
-        .filter((s, i, arr) => arr.indexOf(s) === i);
-
-    if (sourceNames.length === 0) return '';
-
-    return `\n\n📚 Sources: ${sourceNames.join(', ')}`;
-}
-
-/**
- * Ensure the consultation reminder is appended if not already present.
- */
-function ensureConsultationReminder(text: string): string {
-    if (text.includes('healthcare provider') || text.includes('consult')) {
-        return text;
-    }
-    return text + '\n\nPlease consult a healthcare provider for personalised advice.';
-}
+// ponytail: Removed formatCitationFooter and ensureConsultationReminder - user wants straightforward responses
 
 // ─── Route Handler ───────────────────────────────────────────────────────────
 
@@ -83,10 +59,9 @@ async function handlePost(request: NextRequest) {
                 if (!slmResult.fallbackUsed) {
                     // SLM succeeded — apply safety guardrails and return
                     const sanitized = sanitizeResponse(slmResult.response);
-                    const finalMessage = ensureConsultationReminder(sanitized);
 
                     return NextResponse.json({
-                        message: finalMessage,
+                        message: sanitized,
                         citations: [],
                         model: 'MenstLLaMA-EC2 (Menstrual Health Specialist)',
                         ragEnabled: false,
@@ -126,10 +101,9 @@ async function handlePost(request: NextRequest) {
 
             // Apply medical safety guardrails
             const sanitizedAnswer = sanitizeResponse(kbResult.response);
-            const finalMessage = ensureConsultationReminder(sanitizedAnswer);
 
             return NextResponse.json({
-                message: finalMessage,
+                message: sanitizedAnswer,
                 citations: kbResult.citations,
                 model: kbResult.modelUsed,
                 ragEnabled: !kbResult.fallbackUsed,
@@ -152,10 +126,8 @@ async function handlePost(request: NextRequest) {
                 contextString,
             );
 
-            const finalMessage = ensureConsultationReminder(response);
-
             return NextResponse.json({
-                message: finalMessage,
+                message: response,
                 citations: [],
                 model: model_used,
                 ragEnabled: false,

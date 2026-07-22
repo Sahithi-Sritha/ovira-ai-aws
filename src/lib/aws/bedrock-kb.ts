@@ -57,23 +57,18 @@ export async function retryWithBackoff<T>(
 
 // ─── System Prompts ──────────────────────────────────────────────────────────
 
-const CHATBOT_SYSTEM_PROMPT = `You are Aria, a warm and understanding friend who specializes in women's health. Think of yourself as a knowledgeable companion who truly cares about helping women understand their bodies and menstrual health.
+const CHATBOT_SYSTEM_PROMPT = `You are Aria, a women's health specialist assistant. Provide clear, straightforward answers about menstrual and reproductive health.
 
-Your personality:
-- Speak naturally and conversationally, like a caring friend would
-- Be empathetic and understanding - periods and women's health can be sensitive topics
+Guidelines:
+- Give direct, helpful answers without disclaimers
 - Use everyday language, not medical jargon
-- Show genuine warmth and support in your responses
-- Keep responses concise but friendly (2-3 short paragraphs)
-
-Important guidelines:
-1. NEVER use clinical terms like: diagnose, diagnosis, treatment, cure, prescribe, disease, disorder, illness, medication, medicine, drug, prescription
-2. Instead, use friendly alternatives: "what you're experiencing", "ways to manage", "things that might help", "patterns I'm noticing"
-3. When sharing information from sources, say things like "From what I've learned..." or "Research shows that..."
-4. Always end with a gentle reminder: "Please consult a healthcare provider for personalised advice."
-5. If asked about topics outside menstrual health, kindly redirect: "I'm here specifically to help with menstrual and reproductive health questions. For other health concerns, it's best to speak with a healthcare provider."
-
-Remember: You're a supportive friend, not a medical professional. Your goal is to educate, support, and empower - never to diagnose or prescribe.`;
+- Keep responses concise (2-3 paragraphs max)
+- NEVER use terms: diagnose, diagnosis, treatment, cure, prescribe, disease, disorder, medication, drug, prescription
+- Use alternatives: "what you're experiencing", "ways to manage", "things that might help"
+- When sharing information from sources, integrate it naturally
+- Do NOT add disclaimers or warnings at the end
+- If asked about non-health topics, politely decline: "I only assist with menstrual and reproductive health questions"
+- Be warm, supportive, and practical`;
 
 const CLINICAL_SYSTEM_PROMPT = `You are a clinical pattern analysis assistant for Ovira AI.
 You generate structured health reports for users to share with their gynaecologist.
@@ -128,9 +123,7 @@ function buildContextOnlyResponse(question: string, context: string): KBResponse
 
     if (blocks.length === 0) {
         return {
-            response:
-                'I wasn\'t able to find specific information about that in our knowledge base. ' +
-                'Please consult a healthcare provider for personalised advice.',
+            response: 'I wasn\'t able to find specific information about that in our knowledge base.',
             citations: [],
             sourceKB: 'chatbot',
             modelUsed: 'local-rag-only',
@@ -143,7 +136,7 @@ function buildContextOnlyResponse(question: string, context: string): KBResponse
     const sentences = topChunk.split(/[.!?]+/).filter(s => s.trim().length > 20);
     const summary = sentences.slice(0, 3).join('. ').trim() + '.';
     
-    const response = summary + '\n\nPlease consult a healthcare provider for personalised advice.';
+    const response = summary;
 
     return {
         response,
@@ -213,9 +206,7 @@ export async function chatWithKB(
 
     // ── Step 4: Nothing available — static safety message ────────────────────
     return {
-        response:
-            'I wasn\'t able to retrieve information for that question right now. ' +
-            'Please consult a healthcare provider for personalised advice.',
+        response: 'I wasn\'t able to retrieve information for that question right now.',
         citations: [],
         sourceKB: 'chatbot',
         modelUsed: 'static-fallback',

@@ -458,17 +458,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('idToken', 'demo-token');
         localStorage.setItem('accessToken', 'demo-token');
         localStorage.setItem('refreshToken', 'demo-token');
-        localStorage.setItem('userEmail', 'demo-user-001');
+        localStorage.setItem('userEmail', 'demo@ovira.ai');
 
         const demoUser: CognitoAuthUser = {
-            username: 'demo-user-001',
+            username: 'demo-user-ovira-2025', // Match seed script userId
             email: 'demo@ovira.ai',
             attributes: { email: 'demo@ovira.ai' },
             session: null as any,
         };
 
         setUser(demoUser);
-        await fetchUserProfile('demo-user-001');
+        await fetchUserProfile('demo-user-ovira-2025'); // Match seed script userId
     };
 
     return (

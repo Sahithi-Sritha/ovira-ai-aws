@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { PWAInstallButton } from '@/components/pwa/InstallButton';
 
 export default function DashboardPage() {
     const { user, userProfile, loading: authLoading } = useAuth();
@@ -260,6 +261,9 @@ export default function DashboardPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    {/* PWA Install Button */}
+                    <PWAInstallButton />
+                    
                     {/* Bell icon with dropdown */}
                     <div className="relative" ref={bellRef}>
                         <button

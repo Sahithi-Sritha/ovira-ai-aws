@@ -69,10 +69,8 @@ export function sanitizeResponse(text: string): string {
         });
     }
 
-    // Add disclaimer footer to all responses
-    const disclaimer = '\n\n⚠️ **Important Disclaimer**: This information is for educational purposes only and does not constitute medical advice, diagnosis, or treatment. Always consult with a qualified healthcare provider for personalized medical guidance.';
-    
-    return text + disclaimer;
+    // ponytail: No disclaimers - user requested straightforward responses
+    return text;
 }
 
 // Detect if we're using a Claude or Nova/Titan model
@@ -328,36 +326,84 @@ Return JSON with this structure:
     }
 }
 
+// ponytail: Check if question is on-topic (women's health related)
+function isOnTopic(message: string): boolean {
+    const lowerMessage = message.toLowerCase();
+    
+    // Women's health keywords
+    const healthKeywords = [
+        'period', 'menstrual', 'cycle', 'cramp', 'pain', 'flow', 'pms', 'pmdd',
+        'ovulation', 'fertility', 'pregnant', 'pregnancy', 'pcos', 'endometriosis',
+        'fibroids', 'hormone', 'estrogen', 'progesterone', 'birth control', 'iud',
+        'symptom', 'mood', 'bloating', 'bleeding', 'spotting', 'discharge',
+        'breast', 'ovary', 'uterus', 'cervix', 'vagina', 'gynecolog', 'reproductive',
+        'menopause', 'perimenopause', 'iron', 'anemia', 'thyroid', 'pelvic',
+        'contraception', 'irregular', 'heavy', 'light', 'late', 'early',
+        'health', 'body', 'feel', 'experience', 'track', 'log'
+    ];
+    
+    // Off-topic indicators (math, programming, general knowledge)
+    const offTopicIndicators = [
+        'calculate', 'solve', 'equation', 'math', 'physics', 'chemistry',
+        'code', 'program', 'function', 'variable', 'algorithm',
+        'capital of', 'president', 'history', 'geography',
+        'recipe', 'cook', 'bake', 'ingredient',
+        'movie', 'song', 'book', 'game', 'sport'
+    ];
+    
+    // Check for off-topic indicators first
+    for (const indicator of offTopicIndicators) {
+        if (lowerMessage.includes(indicator)) return false;
+    }
+    
+    // Check for health keywords
+    for (const keyword of healthKeywords) {
+        if (lowerMessage.includes(keyword)) return true;
+    }
+    
+    // Short greetings are okay
+    if (lowerMessage.length < 30 && (
+        lowerMessage.includes('hi') || 
+        lowerMessage.includes('hello') ||
+        lowerMessage.includes('hey')
+    )) return true;
+    
+    // If message is very short and no health keywords, might be off-topic
+    if (lowerMessage.length < 50) return false;
+    
+    // Default: allow (benefit of doubt)
+    return true;
+}
+
 // Chat with AI assistant
 export async function chatWithAI(
     message: string,
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
     userContext?: string
 ): Promise<InvokeResult> {
-    const systemPrompt = `You are Aria, a warm and understanding friend who specializes in women's health. Think of yourself as a knowledgeable companion who truly cares about helping women understand their bodies and menstrual health.
+    // ponytail: Reject off-topic questions
+    if (!isOnTopic(message)) {
+        return {
+            response: "I'm specifically designed to help with menstrual and reproductive health questions. For other topics, I'd recommend consulting appropriate resources or professionals.",
+            model_used: 'topic-filter',
+            attempts: 0
+        };
+    }
 
-${userContext ? `About this person:
+    const systemPrompt = `You are Aria, a women's health specialist assistant. Provide clear, straightforward answers about menstrual and reproductive health.
+
+${userContext ? `User context:
 ${userContext}
 
-Use this to personalize your responses naturally. For example:
-- If she mentions PCOS and a rice-heavy diet, you might say: "Since you have PCOS and eat a lot of rice, you might find it helpful to know that rice can affect iron absorption. Try adding some vitamin C-rich foods to your meals - it really helps!"
-- If she's vegetarian, never suggest non-vegetarian options
-- If she's tracking irregular cycles, keep your focus on cycle patterns and what might help
-
-` : ''}Your personality:
-- Speak naturally and conversationally, like a caring friend would
-- Be empathetic and understanding - periods and women's health can be sensitive topics
+` : ''}Guidelines:
+- Give direct, helpful answers without disclaimers
 - Use everyday language, not medical jargon
-- Show genuine warmth and support in your responses
-- Keep responses concise but friendly (2-3 short paragraphs)
-
-Important guidelines:
-1. NEVER use clinical terms like: diagnose, diagnosis, treatment, cure, prescribe, disease, disorder, illness, medication, medicine, drug, prescription
-2. Instead, use friendly alternatives: "what you're experiencing", "ways to manage", "things that might help", "patterns I'm noticing"
-3. Always end with: "Please consult a healthcare provider for personalised advice."
-4. Be conversational and natural - avoid sounding robotic or overly formal
-
-Remember: You're a supportive friend, not a medical professional. Your goal is to educate, support, and empower.`;
+- Keep responses concise (2-3 paragraphs max)
+- NEVER use terms: diagnose, diagnosis, treatment, cure, prescribe, disease, disorder, medication, drug, prescription
+- Use alternatives: "what you're experiencing", "ways to manage", "things that might help"
+- If asked about non-health topics, politely decline: "I only assist with menstrual and reproductive health questions"
+- Do NOT add disclaimers or warnings at the end
+- Be warm, supportive, and practical`;
 
     return invokeAI(message, systemPrompt, conversationHistory);
 }
