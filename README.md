@@ -14,8 +14,9 @@
 [![AWS Bedrock](https://img.shields.io/badge/Amazon_Bedrock-FF9900?style=flat-square&logo=amazonaws&logoColor=white)](https://aws.amazon.com/bedrock/)
 [![DynamoDB](https://img.shields.io/badge/DynamoDB-4053D6?style=flat-square&logo=amazondynamodb&logoColor=white)](https://aws.amazon.com/dynamodb/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Sahithi-Sritha/ovira-ai-aws)
 
-**🏆 Built for AI for Bharat Hackathon 2025 — Powered by AWS**
+**🏆 Top 300 Project in AWS 10,000 AIdeas Hackathon (Semifinalist)**
 
 [🚀 Live Demo](#) · [📹 Demo Video](#) · [📋 Docs](#architecture) · [🩷 Try as Priya](#demo-account)
 
